@@ -48,7 +48,7 @@ export interface KernelType {
   color: string
   boss?: boolean // triggers the boss-incoming cue + heading rotation
   cobShape?: boolean // rendered as a cob (rotates to heading)
-  resistLaser?: boolean // immune to the laser tower (Corn Bunch)
+  resistLaser?: boolean // immune to the laser tower (Shiney Kernel)
   /** on pop, spawn these (dist-staggered behind the pop point) */
   children?: { type: KernelTypeId; count: number; spread: number }
 }
