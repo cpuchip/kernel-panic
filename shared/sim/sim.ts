@@ -4,12 +4,13 @@
 
 import { dist, pointSegDist } from '../vec.ts'
 import type { Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, getRound, stat, towerIncome } from './content.ts'
+import { KERNELS, PATH, ROUNDS, TOWERS, getRound, stat, towerIncome, towerSpent } from './content.ts'
 import { distToPath, pointAt } from './path.ts'
 import {
   DT,
   EARLY_BONUS_FRAC,
   EARLY_WINDOW_TICKS,
+  SPEED_SCALE,
   START_BUTTER,
   START_LIVES,
   TILE,
@@ -94,20 +95,19 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
     case 'upgrade': {
       const t = s.towers.find((w) => w.id === cmd.id)
       if (!t) fail('no such tower')
-      if (t.level >= 1) fail('already upgraded')
       const def = TOWERS[t.type]
-      if (s.butter < def.upgrade.cost) fail('not enough butter')
-      s.butter -= def.upgrade.cost
-      t.level = 1
+      if (t.level >= def.upgrades.length) fail('fully upgraded')
+      const cost = def.upgrades[t.level].cost
+      if (s.butter < cost) fail('not enough butter')
+      s.butter -= cost
+      t.level++
       return
     }
     case 'sell': {
       const i = s.towers.findIndex((w) => w.id === cmd.id)
       if (i < 0) fail('no such tower')
       const t = s.towers[i]
-      const def = TOWERS[t.type]
-      const spent = def.cost + (t.level >= 1 ? def.upgrade.cost : 0)
-      s.butter += Math.floor(spent * 0.7) // 70% refund
+      s.butter += Math.floor(towerSpent(TOWERS[t.type], t.level) * 0.7) // 70% refund
       s.towers.splice(i, 1)
       return
     }
@@ -172,7 +172,7 @@ function advanceKernels(s: SimState): void {
   const survivors: Kernel[] = []
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
-    k.dist += kt.speed * DT
+    k.dist += kt.speed * SPEED_SCALE * DT
     if (k.dist >= PATH.total) {
       // leaked into the bowl
       s.lives -= kt.leak
@@ -268,6 +268,7 @@ function fireTowers(s: SimState, _rng: Rng): void {
       const ex = t.x + (dx / len) * range
       const ey = t.y + (dy / len) * range
       for (const k of s.kernels) {
+        if (KERNELS[k.type].resistLaser) continue // Corn Bunch shrugs off the beam
         const p = kernelPos(k)
         if (pointSegDist(p.x, p.y, t.x, t.y, ex, ey) <= width + KERNELS[k.type].radius) {
           k.hp -= dmg

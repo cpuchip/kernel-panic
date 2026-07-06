@@ -61,7 +61,7 @@
     {#if sel}
       <div class="sel">
         <div class="sel-head">
-          <b>{sel.def.name}</b>{#if sel.upgraded}<span class="badge">★ {sel.def.upgrade.name}</span>{/if}
+          <b>{sel.def.name}</b>{#if sel.level > 0}<span class="badge">{'★'.repeat(sel.level)}</span>{/if}
           <button class="x" onclick={deselect} aria-label="close">×</button>
         </div>
         {#if sel.def.kind !== 'econ'}
@@ -72,8 +72,12 @@
           </div>
         {/if}
         <div class="sel-actions">
-          {#if !sel.upgraded}
-            <button class="up" disabled={!sel.canUpgrade} onclick={upgradeSelected}>{sel.def.upgrade.name} · 🧈{sel.upgradeCost}</button>
+          {#if sel.nextTier}
+            <button class="up" disabled={!sel.canUpgrade} onclick={upgradeSelected}>
+              {sel.nextTier.name} · 🧈{sel.nextTier.cost}
+            </button>
+          {:else}
+            <span class="maxed">★ maxed</span>
           {/if}
           <button class="sell" onclick={sellSelected}>Sell 🧈{sel.sellValue}</button>
         </div>

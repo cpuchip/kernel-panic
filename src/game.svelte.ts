@@ -4,7 +4,7 @@
 // chrome around it.
 
 import { mulberry32, type Rng } from '../shared/rng.ts'
-import { ROUNDS, TOWERS, TOWER_ORDER, stat } from '../shared/sim/content.ts'
+import { ROUNDS, TOWERS, TOWER_ORDER, stat, towerSpent } from '../shared/sim/content.ts'
 import { apply, earlyBonus, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
 import { DT, TPS, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
 import { draw, type FxItem } from './render.ts'
@@ -250,14 +250,16 @@ export function selectedTower() {
   const t = sim.towers.find((w) => w.id === ui.selectedId)
   if (!t) return null
   const def = TOWERS[t.type]
+  const nextTier = t.level < def.upgrades.length ? def.upgrades[t.level] : null
   return {
     tower: t,
     def,
     range: stat(def, t.level, 'range') as number,
-    upgradeCost: def.upgrade.cost,
-    canUpgrade: t.level < 1 && sim.butter >= def.upgrade.cost,
-    upgraded: t.level >= 1,
-    sellValue: Math.floor((def.cost + (t.level >= 1 ? def.upgrade.cost : 0)) * 0.7),
+    level: t.level,
+    maxLevel: def.upgrades.length,
+    nextTier, // { name, cost } | null
+    canUpgrade: nextTier !== null && sim.butter >= nextTier.cost,
+    sellValue: Math.floor(towerSpent(def, t.level) * 0.7),
   }
 }
 

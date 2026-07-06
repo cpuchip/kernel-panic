@@ -8,7 +8,7 @@
 // MP correctness check).
 
 import { mulberry32, type Rng } from '../rng.ts'
-import { PATH, ROUNDS, TOWERS, getRound } from './content.ts'
+import { KERNELS, PATH, ROUNDS, TOWERS, getRound } from './content.ts'
 import { pointAt, distToPath } from './path.ts'
 import { apply, earlyBonus, newGame, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
 import { EARLY_WINDOW_TICKS, START_LIVES, WORLD_H, WORLD_W, TILE, type Command, type SimState } from './types.ts'
@@ -196,12 +196,12 @@ console.log('split behavior')
   if (s.phase === 'build') apply(s, { t: 'startRound' }, rng)
   guard = 4000
   while (s.round === 5 && s.phase === 'round' && guard-- > 0) {
-    const before = s.kernels.filter((k) => k.type === 'plain').length
+    const before = s.kernels.filter((k) => k.type === 'kernel').length
     tick(s, rng)
-    const after = s.kernels.filter((k) => k.type === 'plain').length
-    if (after > before) sawChild = true // a plain appeared → born from a caramel pop
+    const after = s.kernels.filter((k) => k.type === 'kernel').length
+    if (after > before) sawChild = true // a corn kernel appeared → born from a hard-kernel pop
   }
-  ok(sawChild || s.round > 5, 'caramel clusters spawned plain children on pop')
+  ok(sawChild || s.round > 5, 'the pop-chain spawns children (hard → corn kernel)')
 }
 
 // ── 7. Build rules ──────────────────────────────────────────────────────────
@@ -242,8 +242,12 @@ console.log('winnable + endless')
         apply(s, { t: 'place', tower: tw, cx, cy }, rng)
       }
     }
+    // upgrade toward max tier when we can comfortably afford the next tier
     for (const t of s.towers) {
-      if (t.level < 1 && s.butter >= TOWERS[t.type].upgrade.cost + 250) apply(s, { t: 'upgrade', id: t.id }, rng)
+      const def = TOWERS[t.type]
+      if (t.level < def.upgrades.length && s.butter >= def.upgrades[t.level].cost + 250) {
+        apply(s, { t: 'upgrade', id: t.id }, rng)
+      }
     }
   }
   let sawCampaignClear = false
@@ -307,6 +311,52 @@ console.log('balance floor')
     tick(s, rng)
   }
   ok(s.phase === 'lost' || s.lives < START_LIVES, `a 2-tower defense can't coast (ended ${s.phase}, round ${s.round}, ${s.lives} lives)`)
+}
+
+// ── 8e. Laser resistance: a Corn Bunch shrugs off the beam, a Corn Cob doesn't ─
+console.log('laser resistance')
+{
+  function laserHits(kernelType: 'bunch' | 'cob'): { before: number; after: number } {
+    const s = newGame()
+    s.butter = 5000
+    const rng = mulberry32(1)
+    apply(s, { t: 'place', tower: 'laser', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
+    const tw = s.towers[0]
+    // inject one kernel on the path within the laser's range
+    let injectDist = 0
+    for (let d = 0; d < PATH.total; d += 4) {
+      const p = pointAt(PATH, d)
+      if (Math.hypot(p.x - tw.x, p.y - tw.y) < 180) {
+        injectDist = d
+        break
+      }
+    }
+    s.phase = 'round'
+    s.roundActive = true
+    s.kernels.push({ id: s.nextId++, type: kernelType, dist: injectDist, hp: KERNELS[kernelType].hp })
+    const before = s.kernels[0].hp
+    for (let i = 0; i < 40; i++) tick(s, rng) // a couple of laser shots
+    const k = s.kernels.find((x) => x.type === kernelType)
+    return { before, after: k ? k.hp : 0 }
+  }
+  const bunch = laserHits('bunch')
+  const cob = laserHits('cob')
+  ok(bunch.after === bunch.before, 'laser does NOT damage a Corn Bunch (resistLaser)')
+  ok(cob.after < cob.before, 'laser DOES damage a Corn Cob')
+}
+
+// ── 8f. Bonus mobs pay out but can't hurt you (leak 0) ──────────────────────
+console.log('bonus mobs')
+{
+  ok(KERNELS.bcob.leak === 0 && KERNELS.bcob.bounty === 10000, 'Buttery Corn Cob: 0 damage, 10000 butter')
+  const s = newGame()
+  s.phase = 'round'
+  s.roundActive = true
+  const rng = mulberry32(2)
+  s.kernels.push({ id: s.nextId++, type: 'bkernel', dist: PATH.total - 2, hp: 8 })
+  const before = s.lives
+  tick(s, rng) // it reaches the bowl this tick
+  ok(s.lives === before, 'a buttery mob reaching the bowl costs 0 lives')
 }
 
 // ── 9. Kernels sit on the path ──────────────────────────────────────────────

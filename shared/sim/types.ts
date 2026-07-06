@@ -13,11 +13,29 @@ export const EARLY_WINDOW_TICKS = 12 * TPS
 export const EARLY_BONUS_FRAC = 0.5
 
 export const START_LIVES = 100
-export const START_BUTTER = 270 // tightened (2026-07-05 balance) — economy was too loose
+export const START_BUTTER = 500 // the new roster needs a bigger opening defense
+
+// The enemy sheet's speeds (design) are relative values on a 25–750 scale; this
+// maps them onto the board so mobs are catchable. Tune this one number to make
+// the whole game faster/slower without touching the roster.
+export const SPEED_SCALE = 0.45
 
 // ── Content (data) ───────────────────────────────────────────────────────────
 
-export type KernelTypeId = 'plain' | 'buttered' | 'caramel' | 'cob'
+// The enemy roster (design by Michael's son, 2026-07-06 — docs/enemy-design.md).
+// Main pop-chain: ton → bunch → cob → hard → kernel → poppable → gone.
+// Bonus mobs: shiney (→ kernel), and the buttery trio (leak 0, huge bounty).
+export type KernelTypeId =
+  | 'poppable'
+  | 'kernel'
+  | 'hard'
+  | 'cob'
+  | 'bunch'
+  | 'ton'
+  | 'shiney'
+  | 'bkernel'
+  | 'bpopcorn'
+  | 'bcob'
 
 export interface KernelType {
   id: KernelTypeId
@@ -25,16 +43,25 @@ export interface KernelType {
   hp: number
   speed: number // world units / second
   bounty: number // butter awarded on pop
-  leak: number // lives lost if it reaches the bowl
+  leak: number // lives lost if it reaches the bowl (the "D" on the sheet)
   radius: number
   color: string
-  boss?: boolean
+  boss?: boolean // triggers the boss-incoming cue + heading rotation
+  cobShape?: boolean // rendered as a cob (rotates to heading)
+  resistLaser?: boolean // immune to the laser tower (Corn Bunch)
   /** on pop, spawn these (dist-staggered behind the pop point) */
   children?: { type: KernelTypeId; count: number; spread: number }
 }
 
 export type TowerKind = 'dart' | 'pulse' | 'beam' | 'econ'
 export type TargetPolicy = 'first' | 'last' | 'strong' | 'close'
+
+/** One purchasable upgrade tier. Later tiers override earlier stats. */
+export interface TowerTier {
+  name: string
+  cost: number
+  patch: Partial<Pick<TowerType, 'range' | 'cooldown' | 'damage' | 'income' | 'beamWidth'>>
+}
 
 export interface TowerType {
   id: string
@@ -49,11 +76,7 @@ export interface TowerType {
   beamWidth?: number // beam
   income?: number // econ: butter per round clear
   blurb: string
-  upgrade: {
-    name: string
-    cost: number
-    patch: Partial<Pick<TowerType, 'range' | 'cooldown' | 'damage' | 'income' | 'beamWidth'>>
-  }
+  upgrades: TowerTier[] // 0 = base; buy tier 1, then tier 2, …
 }
 
 export interface SpawnGroup {

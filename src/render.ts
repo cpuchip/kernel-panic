@@ -182,18 +182,25 @@ function drawTowers(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   }
 }
 
+// New 10-mob roster maps onto the existing 4 sprites (art-polish per mob later).
+const KERNEL_SPRITE: Record<string, string> = {
+  poppable: 'plain', kernel: 'plain', hard: 'plain', shiney: 'buttered',
+  cob: 'cob', bunch: 'cob', ton: 'cob', bcob: 'cob',
+  bkernel: 'buttered', bpopcorn: 'caramel',
+}
+
 function drawKernels(ctx: CanvasRenderingContext2D, s: SimState): void {
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
     const p = kernelWorld(k)
-    const img = sprite(k.type)
+    const img = sprite(KERNEL_SPRITE[k.type] ?? k.type)
     ctx.save()
     ctx.translate(p.x, p.y)
     if (img) {
-      // cob art faces right; rotate it to the travel heading
-      if (kt.boss) ctx.rotate(kernelHeading(k))
+      // cob-shaped mobs' art faces right; rotate it to the travel heading
+      if (kt.cobShape) ctx.rotate(kernelHeading(k))
       drawSpriteFit(ctx, img, kt.radius * 2.9)
-    } else if (kt.boss) {
+    } else if (kt.cobShape) {
       ctx.rotate(kernelHeading(k))
       ctx.fillStyle = '#7a9a3a'
       ctx.beginPath(); ellipse(ctx, -kt.radius * 0.5, 0, kt.radius + 6, kt.radius - 1); ctx.fill()
