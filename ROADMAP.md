@@ -31,7 +31,14 @@ The record of the drive. Newest state at the top.
   unlock every gesture until 'running', self-heal suspended ctx, louder gains) · **balance**
   (Butter Churn 400→525 / income 80→36 — his call it was too cheap + flooded; start butter
   320→270, early rounds +~40% count and ~12% faster; a lazy 2-tower defense now loses at
-  round 10). Oracle 33. NEXT: more balance tuning from play + maybe a kitchen board texture.
+  round 10). Oracle 33.
+- **Phase 1c — new enemy roster + tower tiers** ✅ **DONE 2026-07-06** (design by Michael's
+  son, `docs/enemy-design.md`): the **10-mob roster** — main pop-chain (Corn Ton →4 Bunch
+  →4 Cob →4 Hard →1 Kernel →1 Poppable) + bonus mobs (Shiney →1 Kernel; the leak-0 Buttery
+  trio worth 1k/2.5k/10k butter). **Corn Bunch resists laser.** Each tower gained a **2nd
+  upgrade tier** with damage scaled to the ~1000-HP Corn Ton chain. `SPEED_SCALE=0.45` maps
+  the sheet's relative speeds onto the board; economy retuned (start 500, bonuses up) so
+  it's winnable. Oracle 37. NEXT: distinct art per new mob; more play-tuning.
 - **Phase 1 — juice + content**: pop FX/SFX (asset-harness), upgrade trees, more
   kernels (camo+detect, kettle), more maps/rounds, endless. ui-craft polish.
 - **Phase 2 — co-op MP**: server-authoritative command relay, shared kitchen, tables.
