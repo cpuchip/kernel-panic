@@ -35,7 +35,7 @@ theme, and "Kernel Panic" (OS kernel / CPU / popcorn / defense-about-to-break) t
 | Money | **Butter** | earn by popping, spend on towers |
 | Lives | **Lives** (start 100) | kernel reaches the bowl → −1 (cobs cost more) |
 | Monkeys / towers | **Heat towers** | fire / microwave / laser / … |
-| Banana Farm | **Corn field** | passive butter generation |
+| Banana Farm | **Butter Churn** | passive butter generation (not "corn field" — don't farm the enemy) |
 | Hero | **The Chef** (or a popper-mascot) | one per game, levels up (later phase) |
 | Round / wave | **Round** | scripted spawn sequence |
 
@@ -76,7 +76,7 @@ Start with 3 for the slice; the rest are Phase-1 content. Each has a small **upg
 | Butter sprayer | slow/debuff | makes kernels sticky and slow (glue/ice parody) |
 | Stovetop | burn zone | lays a lingering heat tile on the path |
 | Salt shaker | detector + debuff | reveals husked (camo) kernels; light damage |
-| **Corn field** | economy | generates butter each round; no attack |
+| **Butter Churn** | economy | churns out butter each round; no attack *(was "corn field" — you fight corn, you don't farm it; a churn makes the butter currency, fits the kitchen)* |
 | The Chef (hero) | scaling unit | one per game, XP, ults (later) |
 
 **Targeting policies** (per tower, player-selectable): First, Last, Strongest, Closest.
@@ -160,7 +160,8 @@ the day; everyone's board is identical; leaderboard is honest by construction.
 Towers, upgrades, kernels, cobs, waves, and maps are JSON/TS-data driven so content scales
 without engine changes:
 
-- `content/towers/*` — stats, upgrade trees, projectile behavior refs.
+- `content/towers/*` — stats, upgrade trees, projectile behavior refs. (Currency is
+  **butter**: earned per pop, generated passively by the Butter Churn.)
 - `content/kernels/*` — HP, speed, immunities, children-on-pop.
 - `content/maps/*` — path polylines, buildable tiles, art ref.
 - `content/rounds/*` — per-round spawn scripts (or a generator for endless).

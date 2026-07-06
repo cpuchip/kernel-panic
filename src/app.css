@@ -1,0 +1,86 @@
+/* Kernel Panic — warm dark "kitchen at night" theme. Popcorn-gold accents. */
+
+:root {
+  --bg: #16100c;
+  --panel: #221812;
+  --panel-2: #2b1f16;
+  --line: #43301d;
+  --text: #f0e3d4;
+  --dim: #a78d76;
+  --pop: #ff8a4c; /* popcorn-fire accent */
+  --danger: #f87171;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1000px 700px at 50% -10%, #241a12, transparent 70%),
+    var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  height: 100dvh;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.05s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--pop);
+  background: #33241a;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: default;
+}
+
+button.on {
+  border-color: var(--pop);
+  color: var(--pop);
+}
+
+button.primary {
+  background: linear-gradient(160deg, #5a3820, #3a2411);
+  border-color: var(--pop);
+  color: #ffe6c8;
+  font-weight: 700;
+  padding: 9px 18px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+h2 {
+  margin: 0;
+  font-weight: 700;
+}

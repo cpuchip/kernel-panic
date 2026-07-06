@@ -1,0 +1,24 @@
+{
+  "name": "kernel-panic",
+  "version": "0.1.0",
+  "description": "Kernel Panic — a popcorn tower defense parody. kernelpanic.cpuchip.net",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "vite build",
+    "serve": "tsx server/index.ts",
+    "smoke": "tsx shared/sim/smoke.ts",
+    "compile": "tsc --noEmit"
+  },
+  "dependencies": {
+    "svelte": "^5"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5",
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vite": "^8"
+  }
+}

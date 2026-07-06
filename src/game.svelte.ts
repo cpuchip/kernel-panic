@@ -1,0 +1,273 @@
+// Client controller: owns the SimState, runs the fixed-timestep loop, maps
+// pointer input to commands, and exposes a reactive `ui` snapshot for the HUD.
+// The canvas draws imperatively (render.ts) — Svelte reactivity is only for the
+// chrome around it.
+
+import { mulberry32, type Rng } from '../shared/rng.ts'
+import { ROUNDS, TOWERS, TOWER_ORDER, stat } from '../shared/sim/content.ts'
+import { apply, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
+import { DT, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
+import { draw, type FxItem } from './render.ts'
+import { playSfx } from './sound.svelte.ts'
+
+export const ui = $state({
+  lives: 0,
+  butter: 0,
+  round: 0, // 1-based for display
+  totalRounds: ROUNDS.length,
+  phase: 'build' as SimState['phase'],
+  roundActive: false,
+  speed: 1,
+  paused: false,
+  placingType: null as string | null,
+  selectedId: null as number | null,
+  error: '',
+  version: 0, // bump to poke Svelte when selection details change
+})
+
+let sim: SimState = newGame()
+let rng: Rng = mulberry32(1)
+let canvas: HTMLCanvasElement | null = null
+let ctx: CanvasRenderingContext2D | null = null
+let raf = 0
+let acc = 0
+let last = 0
+const fx: FxItem[] = []
+let hoverTile: { cx: number; cy: number } | null = null
+let errorTimer: ReturnType<typeof setTimeout> | null = null
+
+export function towerOrder(): TowerType[] {
+  return TOWER_ORDER.map((id) => TOWERS[id])
+}
+
+function syncUi(): void {
+  ui.lives = sim.lives
+  ui.butter = sim.butter
+  ui.round = Math.min(sim.round + (sim.phase === 'round' ? 1 : 1), ROUNDS.length)
+  ui.phase = sim.phase
+  ui.roundActive = sim.roundActive
+}
+
+function flashError(msg: string): void {
+  ui.error = msg
+  if (errorTimer) clearTimeout(errorTimer)
+  errorTimer = setTimeout(() => (ui.error = ''), 1600)
+}
+
+function dispatch(cmd: Command): boolean {
+  try {
+    apply(sim, cmd, rng)
+    syncUi()
+    ui.version++
+    return true
+  } catch (e) {
+    if (e instanceof RuleError) flashError(e.message)
+    else throw e
+    return false
+  }
+}
+
+// ── Loop ─────────────────────────────────────────────────────────────────────
+
+export function start(cv: HTMLCanvasElement): void {
+  canvas = cv
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  cv.width = WORLD_W * dpr
+  cv.height = WORLD_H * dpr
+  ctx = cv.getContext('2d')
+  ctx?.scale(dpr, dpr)
+  last = performance.now()
+  loop(last)
+}
+
+export function stop(): void {
+  cancelAnimationFrame(raf)
+}
+
+function loop(now: number): void {
+  raf = requestAnimationFrame(loop)
+  const realDt = Math.min((now - last) / 1000, 0.1)
+  last = now
+  const speed = ui.paused ? 0 : ui.speed
+  acc += realDt * speed
+  let steps = 0
+  while (acc >= DT && steps < 8) {
+    tick(sim, rng)
+    ingestEvents()
+    acc -= DT
+    steps++
+  }
+  if (steps > 0) syncUi()
+  advanceFx(realDt)
+  if (ctx) {
+    draw(ctx, sim, {
+      hoverTile,
+      placingType: ui.placingType,
+      selectedId: ui.selectedId,
+      canPlace: hoverTile ? canPlaceHover() : false,
+      fx,
+    })
+  }
+}
+
+function ingestEvents(): void {
+  for (const e of sim.events) {
+    switch (e.t) {
+      case 'pop':
+        fx.push({ kind: 'pop', x: e.x!, y: e.y!, life: e.boss ? 0.5 : 0.3, max: e.boss ? 0.5 : 0.3, r: e.boss ? 30 : 12, color: kernelColor(e.kind) })
+        playSfx(e.boss ? 'bosspop' : 'pop')
+        break
+      case 'beam':
+        fx.push({ kind: 'beam', x: e.x!, y: e.y!, tx: e.tx!, ty: e.ty!, life: 0.09, max: 0.09, color: '#ff4d6d' })
+        playSfx('laser')
+        break
+      case 'pulse':
+        fx.push({ kind: 'pulse', x: e.x!, y: e.y!, life: 0.28, max: 0.28, r: e.r!, color: '#5ad1e8' })
+        playSfx('microwave')
+        break
+      case 'fire':
+        playSfx('fire')
+        break
+      case 'leak':
+        fx.push({ kind: 'leak', x: e.x!, y: e.y!, life: 0.4, max: 0.4, r: 22, color: '#f87171' })
+        playSfx('leak')
+        break
+      case 'roundClear':
+        playSfx('roundclear')
+        break
+      case 'bossIn':
+        playSfx('bossin')
+        break
+    }
+  }
+}
+
+function advanceFx(dt: number): void {
+  for (let i = fx.length - 1; i >= 0; i--) {
+    fx[i].life -= dt
+    if (fx[i].life <= 0) fx.splice(i, 1)
+  }
+}
+
+function kernelColor(id?: string): string {
+  switch (id) {
+    case 'buttered': return '#f6b73c'
+    case 'caramel': return '#b5651d'
+    case 'cob': return '#e8c14a'
+    default: return '#f4d58d'
+  }
+}
+
+// ── Input → commands ─────────────────────────────────────────────────────────
+
+function pxToTile(clientX: number, clientY: number): { cx: number; cy: number } | null {
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  const wx = ((clientX - rect.left) / rect.width) * WORLD_W
+  const wy = ((clientY - rect.top) / rect.height) * WORLD_H
+  if (wx < 0 || wy < 0 || wx > WORLD_W || wy > WORLD_H) return null
+  return { cx: Math.floor(wx / TILE), cy: Math.floor(wy / TILE) }
+}
+
+export function onPointerMove(clientX: number, clientY: number): void {
+  hoverTile = pxToTile(clientX, clientY)
+}
+
+export function onPointerLeave(): void {
+  hoverTile = null
+}
+
+function canPlaceHover(): boolean {
+  if (!ui.placingType || !hoverTile) return false
+  const def = TOWERS[ui.placingType]
+  return sim.butter >= def.cost && tileBuildable(sim, hoverTile.cx, hoverTile.cy)
+}
+
+export function onCanvasClick(clientX: number, clientY: number): void {
+  const tile = pxToTile(clientX, clientY)
+  if (!tile) return
+  // clicked an existing tower? select it.
+  const hit = sim.towers.find((t) => t.cx === tile.cx && t.cy === tile.cy)
+  if (ui.placingType) {
+    if (dispatch({ t: 'place', tower: ui.placingType, cx: tile.cx, cy: tile.cy })) {
+      playSfx('place')
+      // stay in place-mode if still affordable, else exit
+      if (sim.butter < TOWERS[ui.placingType].cost) ui.placingType = null
+    }
+    return
+  }
+  if (hit) {
+    ui.selectedId = hit.id
+    ui.version++
+  } else {
+    ui.selectedId = null
+  }
+}
+
+export function selectType(id: string): void {
+  ui.placingType = ui.placingType === id ? null : id
+  ui.selectedId = null
+}
+
+export function cancelPlacing(): void {
+  ui.placingType = null
+}
+
+export function selectedTower() {
+  if (ui.selectedId === null) return null
+  const t = sim.towers.find((w) => w.id === ui.selectedId)
+  if (!t) return null
+  const def = TOWERS[t.type]
+  return {
+    tower: t,
+    def,
+    range: stat(def, t.level, 'range') as number,
+    upgradeCost: def.upgrade.cost,
+    canUpgrade: t.level < 1 && sim.butter >= def.upgrade.cost,
+    upgraded: t.level >= 1,
+    sellValue: Math.floor((def.cost + (t.level >= 1 ? def.upgrade.cost : 0)) * 0.7),
+  }
+}
+
+export function upgradeSelected(): void {
+  if (ui.selectedId !== null && dispatch({ t: 'upgrade', id: ui.selectedId })) playSfx('place')
+}
+
+export function sellSelected(): void {
+  if (ui.selectedId !== null && dispatch({ t: 'sell', id: ui.selectedId })) {
+    ui.selectedId = null
+    playSfx('sell')
+  }
+}
+
+export function setTargetSelected(policy: TargetPolicy): void {
+  if (ui.selectedId !== null) dispatch({ t: 'target', id: ui.selectedId, policy })
+}
+
+export function startRound(): void {
+  if (dispatch({ t: 'startRound' })) playSfx('start')
+}
+
+export function setSpeed(n: number): void {
+  ui.speed = n
+  ui.paused = false
+}
+
+export function togglePause(): void {
+  ui.paused = !ui.paused
+}
+
+export function restart(): void {
+  sim = newGame()
+  rng = mulberry32(1)
+  fx.length = 0
+  ui.placingType = null
+  ui.selectedId = null
+  ui.paused = false
+  ui.speed = 1
+  syncUi()
+  ui.version++
+}
+
+// initialize UI mirror
+syncUi()
