@@ -1,8 +1,30 @@
 # Asset provenance
 
-All audio is generated on a local, license-clean pipeline (Dave's asset-harness:
-ComfyUI). Deterministic seeds — rerunning a seed reproduces the asset. Art (sprites,
-kitchen tileset) is the next increment; Phase 0/1 render shapes.
+All art + audio is generated on a local, license-clean pipeline (Dave's asset-harness:
+ComfyUI). Deterministic seeds — rerunning a seed reproduces the asset.
+
+## Art — sprites (Z-Image Turbo + ControlNet + BiRefNet, Apache-2.0/MIT chain)
+
+Playful carnival-cartoon direction (Michael's call). One style anchor reused across the
+set; crude control primitives (`make_kp_primitives.py`, `make_kp_popcorn.py`) lock the
+layout, the prompt does the art. Cropped/resized into `public/assets/sprites/` by
+`prep_kp_sprites.py`. The renderer falls back to shapes if a sprite is missing.
+
+| File | Seed | What |
+|------|------|------|
+| `sprites/plain.png` | 4021 | plain popcorn kernel (re-rolled — v1 seed 4001 read as fruit) |
+| `sprites/buttered.png` | 4022 | buttered popcorn kernel |
+| `sprites/caramel.png` | 4023 | caramel-cluster kernel |
+| `sprites/cob.png` | 4004 | the COB boss (angry corn-on-the-cob; faces right, render rotates to heading) |
+| `sprites/fire.png` | 4005 | Fire Tosser (flaming red toaster) |
+| `sprites/microwave.png` | 4006 | Microwave |
+| `sprites/laser.png` | 4007 | Laser (ray-gun appliance) |
+| `sprites/churn.png` | 4008 | Butter Churn |
+
+Re-roll any sprite: `make_kp_primitives.py`/`make_kp_popcorn.py` for the control image,
+then `run_zimage_controlnet.py` (GPU-0 image ComfyUI on :8188), then `prep_kp_sprites.py`.
+
+## Audio — SFX
 
 ## Audio — SFX
 

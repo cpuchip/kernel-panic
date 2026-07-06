@@ -23,7 +23,15 @@ The record of the drive. Newest state at the top.
   heading** · **near-square 640×640 map** (4-run serpentine — fills phones) · **responsive
   layout** (HUD wraps, nothing clips, full-width Start on mobile, floating tower panel) ·
   **11 pop SFX** generated on the asset-harness + ⚙ settings mute. Oracle 32 assertions.
-  ★ **balance is soft** — 3 fire tossers held 9 rounds; early rounds need to bite harder.
+- **Phase 1b — sprite art + sound-hardening + balance** ✅ **DONE 2026-07-05** (Michael +
+  son, 2nd feedback): **carnival-cartoon sprite set** (8 sprites on the asset-harness —
+  popcorn kernels, the angry-cob boss, toaster/microwave/ray-gun/churn towers; shape
+  fallback; cob rotates to heading) · **audio HARDENED** (they heard nothing on their
+  phone; desktop pipeline verified healthy so it's a hardening not a confirmed fix — retry
+  unlock every gesture until 'running', self-heal suspended ctx, louder gains) · **balance**
+  (Butter Churn 400→525 / income 80→36 — his call it was too cheap + flooded; start butter
+  320→270, early rounds +~40% count and ~12% faster; a lazy 2-tower defense now loses at
+  round 10). Oracle 33. NEXT: more balance tuning from play + maybe a kitchen board texture.
 - **Phase 1 — juice + content**: pop FX/SFX (asset-harness), upgrade trees, more
   kernels (camo+detect, kettle), more maps/rounds, endless. ui-craft polish.
 - **Phase 2 — co-op MP**: server-authoritative command relay, shared kitchen, tables.

@@ -26,6 +26,29 @@ export interface View {
   fx: FxItem[]
 }
 
+// ── Sprites (carnival-cartoon art; fall back to shapes until loaded) ─────────
+const SPRITES: Record<string, HTMLImageElement> = {}
+if (typeof Image !== 'undefined') {
+  for (const n of ['plain', 'buttered', 'caramel', 'cob', 'fire', 'microwave', 'laser', 'churn']) {
+    const img = new Image()
+    img.src = `/assets/sprites/${n}.png`
+    SPRITES[n] = img
+  }
+}
+function sprite(name: string): HTMLImageElement | null {
+  const img = SPRITES[name]
+  return img && img.complete && img.naturalWidth > 0 ? img : null
+}
+/** Draw a sprite centered at the current origin, fit into a size×size box (aspect kept). */
+function drawSpriteFit(ctx: CanvasRenderingContext2D, img: HTMLImageElement, size: number): void {
+  const ar = img.width / img.height
+  let w = size
+  let h = size
+  if (ar > 1) h = size / ar
+  else w = size * ar
+  ctx.drawImage(img, -w / 2, -h / 2, w, h)
+}
+
 export function draw(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   background(ctx)
   drawPath(ctx)
@@ -102,6 +125,19 @@ function towerBody(ctx: CanvasRenderingContext2D, t: Tower): void {
   const def = TOWERS[t.type]
   ctx.save()
   ctx.translate(t.x, t.y)
+  const img = sprite(t.type)
+  if (img) {
+    drawSpriteFit(ctx, img, 32)
+    if (t.level >= 1) {
+      ctx.fillStyle = '#ffd166'
+      ctx.font = '12px system-ui'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('★', 13, -13)
+    }
+    ctx.restore()
+    return
+  }
   const R = 12
   ctx.fillStyle = def.color
   ctx.strokeStyle = 'rgba(0,0,0,0.5)'
@@ -150,32 +186,34 @@ function drawKernels(ctx: CanvasRenderingContext2D, s: SimState): void {
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
     const p = kernelWorld(k)
+    const img = sprite(k.type)
     ctx.save()
     ctx.translate(p.x, p.y)
-    if (kt.boss) {
-      // cob: an oblong body with kernel rows, turned to face its heading
+    if (img) {
+      // cob art faces right; rotate it to the travel heading
+      if (kt.boss) ctx.rotate(kernelHeading(k))
+      drawSpriteFit(ctx, img, kt.radius * 2.9)
+    } else if (kt.boss) {
       ctx.rotate(kernelHeading(k))
-      ctx.fillStyle = '#7a9a3a' // husk (drawn as a tapered tail behind travel)
+      ctx.fillStyle = '#7a9a3a'
       ctx.beginPath(); ellipse(ctx, -kt.radius * 0.5, 0, kt.radius + 6, kt.radius - 1); ctx.fill()
       ctx.fillStyle = kt.color
       ctx.beginPath(); ellipse(ctx, 0, 0, kt.radius, kt.radius - 3); ctx.fill()
-      ctx.fillStyle = 'rgba(120,90,20,0.5)'
-      for (let gx = -kt.radius + 4; gx < kt.radius - 2; gx += 5) ctx.fillRect(gx, -kt.radius + 4, 2, kt.radius * 2 - 8)
     } else {
       ctx.fillStyle = kt.color
       ctx.beginPath(); ctx.arc(0, 0, kt.radius, 0, Math.PI * 2); ctx.fill()
       ctx.fillStyle = 'rgba(255,255,255,0.35)'
       ctx.beginPath(); ctx.arc(-kt.radius * 0.3, -kt.radius * 0.3, kt.radius * 0.35, 0, Math.PI * 2); ctx.fill()
     }
-    // hp arc for multi-hp kernels
-    if (kt.hp > 1) {
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 2
+    ctx.restore()
+    // hp arc for multi-hp kernels (drawn unrotated, around the sprite)
+    if (kt.hp > 1 && k.hp < kt.hp) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+      ctx.lineWidth = 2.5
       ctx.beginPath()
-      ctx.arc(0, 0, kt.radius + 3, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * k.hp) / kt.hp)
+      ctx.arc(p.x, p.y, kt.radius * 1.5 + 3, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * k.hp) / kt.hp)
       ctx.stroke()
     }
-    ctx.restore()
   }
 }
 
