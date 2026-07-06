@@ -13,7 +13,7 @@ export const EARLY_WINDOW_TICKS = 12 * TPS
 export const EARLY_BONUS_FRAC = 0.5
 
 export const START_LIVES = 100
-export const START_BUTTER = 320
+export const START_BUTTER = 270 // tightened (2026-07-05 balance) — economy was too loose
 
 // ── Content (data) ───────────────────────────────────────────────────────────
 

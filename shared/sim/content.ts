@@ -27,14 +27,14 @@ export const PATH: Path = buildPath(PATH_POINTS)
 // ── Kernels (the "bloon" layers) ─────────────────────────────────────────────
 
 export const KERNELS: Record<KernelTypeId, KernelType> = {
-  plain: { id: 'plain', name: 'Kernel', hp: 1, speed: 46, bounty: 3, leak: 1, radius: 8, color: '#f4d58d' },
-  buttered: { id: 'buttered', name: 'Buttered', hp: 1, speed: 82, bounty: 4, leak: 1, radius: 8, color: '#f6b73c' },
+  plain: { id: 'plain', name: 'Kernel', hp: 1, speed: 52, bounty: 3, leak: 1, radius: 8, color: '#f4d58d' },
+  buttered: { id: 'buttered', name: 'Buttered', hp: 1, speed: 92, bounty: 4, leak: 1, radius: 8, color: '#f6b73c' },
   caramel: {
     id: 'caramel',
     name: 'Caramel Cluster',
-    hp: 4,
-    speed: 34,
-    bounty: 7,
+    hp: 5,
+    speed: 38,
+    bounty: 6,
     leak: 3,
     radius: 11,
     color: '#b5651d',
@@ -43,9 +43,9 @@ export const KERNELS: Record<KernelTypeId, KernelType> = {
   cob: {
     id: 'cob',
     name: 'COB',
-    hp: 60,
-    speed: 24,
-    bounty: 60,
+    hp: 70,
+    speed: 27,
+    bounty: 55,
     leak: 12,
     radius: 20,
     color: '#e8c14a',
@@ -99,14 +99,14 @@ export const TOWERS: Record<string, TowerType> = {
     id: 'churn',
     name: 'Butter Churn',
     kind: 'econ',
-    cost: 400,
+    cost: 525,
     range: 0,
     cooldown: 0,
     damage: 0,
     color: '#f2e2b0',
-    income: 80,
-    blurb: 'No attack. Churns out butter every round you clear.',
-    upgrade: { name: 'Extra Cream', cost: 350, patch: { income: 170 } },
+    income: 36, // nerfed: was cheap (400) + flooded (80/round). Now a real long-term bet.
+    blurb: 'No attack. Slowly churns out a little butter every round you clear.',
+    upgrade: { name: 'Extra Cream', cost: 500, patch: { income: 82 } },
   },
 }
 
@@ -119,13 +119,15 @@ function g(type: KernelTypeId, count: number, gap: number, delay = 0) {
 }
 
 export const ROUNDS: RoundDef[] = [
-  { groups: [g('plain', 8, 26)], bonus: 30 }, // 1
-  { groups: [g('plain', 14, 20)], bonus: 32 }, // 2
-  { groups: [g('plain', 10, 18), g('buttered', 4, 30, 220)], bonus: 36 }, // 3
-  { groups: [g('buttered', 10, 20)], bonus: 40 }, // 4
-  { groups: [g('plain', 12, 14), g('caramel', 3, 60, 120)], bonus: 46 }, // 5
-  { groups: [g('buttered', 14, 16), g('caramel', 4, 50, 200)], bonus: 52 }, // 6
-  { groups: [g('caramel', 8, 40)], bonus: 60 }, // 7
+  // Early rounds bump up + bonuses trim down (2026-07-05 balance: 3 fire tossers
+  // held 9 rounds unscathed; early game needs teeth and less of a money flood).
+  { groups: [g('plain', 12, 22)], bonus: 26 }, // 1
+  { groups: [g('plain', 20, 16)], bonus: 28 }, // 2
+  { groups: [g('plain', 16, 15), g('buttered', 6, 26, 200)], bonus: 32 }, // 3
+  { groups: [g('buttered', 16, 16)], bonus: 36 }, // 4
+  { groups: [g('plain', 18, 12), g('caramel', 4, 54, 120)], bonus: 42 }, // 5
+  { groups: [g('buttered', 20, 13), g('caramel', 6, 44, 200)], bonus: 48 }, // 6
+  { groups: [g('caramel', 11, 34)], bonus: 56 }, // 7
   { groups: [g('cob', 1, 0), g('plain', 16, 14, 120)], bonus: 90 }, // 8 — first boss
   { groups: [g('buttered', 20, 12), g('caramel', 5, 44, 260)], bonus: 70 }, // 9
   { groups: [g('caramel', 10, 34), g('buttered', 12, 14, 100)], bonus: 80 }, // 10

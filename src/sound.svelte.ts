@@ -1,7 +1,12 @@
 // Sound — WebAudio SFX generated on the local asset-harness. The mute flag lives
 // in settings.svelte.ts (shared with the settings gear). Loads whatever exists
-// under /assets/sfx and silently no-ops for anything missing, so call sites never
-// need to change as the set grows.
+// under /assets/sfx and silently no-ops for anything missing.
+//
+// Mobile autoplay is finicky: a suspended AudioContext produces no sound even
+// with buffers loaded. So we (1) keep retrying unlock on EVERY gesture until the
+// context actually reaches 'running' (a single first-gesture unlock can silently
+// fail to stick on mobile Chrome), and (2) self-heal inside playSfx by resuming a
+// suspended context. Gains are set to be clearly audible on a phone speaker.
 
 import { settings } from './settings.svelte.ts'
 
@@ -10,17 +15,17 @@ export type SfxName =
   | 'roundclear' | 'bossin' | 'place' | 'sell' | 'start'
 
 const GAIN: Record<SfxName, number> = {
-  pop: 0.4, bosspop: 0.6, laser: 0.3, microwave: 0.35, fire: 0.22, leak: 0.5,
-  roundclear: 0.5, bossin: 0.6, place: 0.4, sell: 0.4, start: 0.4,
+  pop: 0.6, bosspop: 0.8, laser: 0.45, microwave: 0.5, fire: 0.32, leak: 0.65,
+  roundclear: 0.65, bossin: 0.75, place: 0.5, sell: 0.5, start: 0.55,
 }
 
 let ctx: AudioContext | null = null
 const buffers = new Map<SfxName, AudioBuffer>()
-let loaded = false
+let loading = false
 
 async function loadAll(): Promise<void> {
-  if (loaded || ctx === null) return
-  loaded = true
+  if (loading || ctx === null) return
+  loading = true
   await Promise.all(
     (Object.keys(GAIN) as SfxName[]).map(async (name) => {
       try {
@@ -28,24 +33,29 @@ async function loadAll(): Promise<void> {
         if (!res.ok) return
         buffers.set(name, await ctx!.decodeAudioData(await res.arrayBuffer()))
       } catch {
-        /* not present yet (Phase 1) — silent */
+        /* missing/undecodable — silent */
       }
     }),
   )
 }
 
 export function playSfx(name: SfxName): void {
-  if (!settings.sfx || ctx === null || ctx.state !== 'running') return
+  if (!settings.sfx) return
+  const c = ctx
+  if (c === null) return
+  if (c.state === 'suspended') void c.resume() // self-heal a context that dozed off
+  if (c.state !== 'running') return
   const buf = buffers.get(name)
   if (!buf) return
-  const src = ctx.createBufferSource()
+  const src = c.createBufferSource()
   src.buffer = buf
-  const g = ctx.createGain()
+  const g = c.createGain()
   g.gain.value = GAIN[name]
-  src.connect(g).connect(ctx.destination)
+  src.connect(g).connect(c.destination)
   src.start()
 }
 
+/** Create/resume the AudioContext. Safe to call repeatedly (idempotent). */
 export function unlock(): void {
   if (ctx === null) {
     try {
@@ -55,15 +65,16 @@ export function unlock(): void {
     }
     void loadAll()
   }
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (ctx.state !== 'running') void ctx.resume()
 }
 
 export function initSound(): void {
-  const once = () => {
-    unlock()
-    window.removeEventListener('pointerdown', once)
-    window.removeEventListener('keydown', once)
-  }
-  window.addEventListener('pointerdown', once)
-  window.addEventListener('keydown', once)
+  // Retry on every gesture (don't detach after the first) — the first unlock can
+  // silently fail to stick on mobile, and a later tap should then take.
+  const kinds: (keyof WindowEventMap)[] = ['pointerdown', 'touchend', 'click', 'keydown']
+  for (const k of kinds) window.addEventListener(k, unlock, { passive: true })
+  // resume when returning to the tab (mobile suspends the context on background)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) unlock()
+  })
 }

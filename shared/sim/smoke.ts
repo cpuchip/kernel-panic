@@ -293,6 +293,22 @@ console.log('early-start bonus')
   ok(s2.butter === before + bonus, 'starting a round awards the current early bonus')
 }
 
+// ── 8d. Balance floor: a lazy minimal defense must NOT coast the campaign ───
+console.log('balance floor')
+{
+  // two fire tossers, no further building — the early game should have teeth.
+  const s = newGame()
+  const rng = mulberry32(5)
+  apply(s, { t: 'place', tower: 'fire', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
+  apply(s, { t: 'place', tower: 'fire', cx: NEAR[1][0], cy: NEAR[1][1] }, rng)
+  let guard = 100000
+  while (s.phase !== 'lost' && s.round < 15 && guard-- > 0) {
+    if (s.phase === 'build') apply(s, { t: 'startRound' }, rng)
+    tick(s, rng)
+  }
+  ok(s.phase === 'lost' || s.lives < START_LIVES, `a 2-tower defense can't coast (ended ${s.phase}, round ${s.round}, ${s.lives} lives)`)
+}
+
 // ── 9. Kernels sit on the path ──────────────────────────────────────────────
 console.log('kernel position')
 {
