@@ -3,7 +3,7 @@
 // kernels, cobs = bosses, towers by kind, plus transient FX from sim events.
 
 import { KERNELS, PATH, TOWERS, stat } from '../shared/sim/content.ts'
-import { kernelWorld, tileBuildable, tileCenter } from '../shared/sim/sim.ts'
+import { kernelHeading, kernelWorld, tileBuildable, tileCenter } from '../shared/sim/sim.ts'
 import { TILE, WORLD_H, WORLD_W, type SimState, type Tower } from '../shared/sim/types.ts'
 
 export interface FxItem {
@@ -153,9 +153,10 @@ function drawKernels(ctx: CanvasRenderingContext2D, s: SimState): void {
     ctx.save()
     ctx.translate(p.x, p.y)
     if (kt.boss) {
-      // cob: an oblong body with kernel rows
-      ctx.fillStyle = '#7a9a3a' // husk
-      ctx.beginPath(); ellipse(ctx, 0, 0, kt.radius + 5, kt.radius + 2); ctx.fill()
+      // cob: an oblong body with kernel rows, turned to face its heading
+      ctx.rotate(kernelHeading(k))
+      ctx.fillStyle = '#7a9a3a' // husk (drawn as a tapered tail behind travel)
+      ctx.beginPath(); ellipse(ctx, -kt.radius * 0.5, 0, kt.radius + 6, kt.radius - 1); ctx.fill()
       ctx.fillStyle = kt.color
       ctx.beginPath(); ellipse(ctx, 0, 0, kt.radius, kt.radius - 3); ctx.fill()
       ctx.fillStyle = 'rgba(120,90,20,0.5)'

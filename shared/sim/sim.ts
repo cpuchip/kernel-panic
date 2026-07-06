@@ -4,10 +4,12 @@
 
 import { dist, pointSegDist } from '../vec.ts'
 import type { Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, stat, towerIncome } from './content.ts'
+import { KERNELS, PATH, ROUNDS, TOWERS, getRound, stat, towerIncome } from './content.ts'
 import { distToPath, pointAt } from './path.ts'
 import {
   DT,
+  EARLY_BONUS_FRAC,
+  EARLY_WINDOW_TICKS,
   START_BUTTER,
   START_LIVES,
   TILE,
@@ -29,11 +31,13 @@ function fail(msg: string): never {
 const BUILD_CLEARANCE = 22 // world units a tower must sit off the path
 const HIT_RADIUS = 6 // dart collision padding beyond kernel radius
 
-export function newGame(): SimState {
+export function newGame(seed = 1): SimState {
   return {
+    seed,
     tick: 0,
     phase: 'build',
     round: 0,
+    buildStartTick: 0,
     lives: START_LIVES,
     butter: START_BUTTER,
     kernels: [],
@@ -44,8 +48,20 @@ export function newGame(): SimState {
     roundActive: false,
     popped: 0,
     leaked: 0,
+    bestRound: 0,
     events: [],
   }
+}
+
+/** Butter you'd collect by starting the next round right now (decays over the
+ * build window from a fraction of the round's clear bonus to 0). */
+export function earlyBonus(s: SimState): number {
+  if (s.phase !== 'build') return 0
+  const def = getRound(s.round, s.seed)
+  const maxBonus = Math.round(def.bonus * EARLY_BONUS_FRAC)
+  const elapsed = s.tick - s.buildStartTick
+  const frac = Math.max(0, 1 - elapsed / EARLY_WINDOW_TICKS)
+  return Math.round(maxBonus * frac)
 }
 
 // ── Tile geometry ────────────────────────────────────────────────────────────
@@ -103,6 +119,7 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
     }
     case 'startRound': {
       if (s.phase !== 'build') fail('not in build phase')
+      s.butter += earlyBonus(s) // reward starting early (0 once the window elapses)
       startRound(s)
       return
     }
@@ -110,8 +127,7 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
 }
 
 function startRound(s: SimState): void {
-  const def = ROUNDS[s.round]
-  if (!def) fail('no such round')
+  const def = getRound(s.round, s.seed)
   const queue: { type: KernelTypeId; atTick: number }[] = []
   for (const grp of def.groups) {
     for (let i = 0; i < grp.count; i++) {
@@ -131,8 +147,10 @@ function startRound(s: SimState): void {
 
 export function tick(s: SimState, rng: Rng): void {
   s.events = []
-  if (s.phase !== 'round') return
+  // Tick advances in every phase (build too) so the early-start bonus can decay.
+  // The round simulation only runs while a wave is live.
   s.tick++
+  if (s.phase !== 'round') return
 
   spawn(s)
   advanceKernels(s)
@@ -311,7 +329,7 @@ function resolveDeaths(s: SimState): void {
 function checkRoundEnd(s: SimState): void {
   if (!s.roundActive) return
   if (s.spawnQueue.length === 0 && s.kernels.length === 0) {
-    const def = ROUNDS[s.round]
+    const def = getRound(s.round, s.seed)
     // round-clear bonus + churn income
     let income = def.bonus
     for (const t of s.towers) income += towerIncome(TOWERS[t.type], t.level)
@@ -319,12 +337,13 @@ function checkRoundEnd(s: SimState): void {
     s.projectiles = []
     s.roundActive = false
     s.round++
+    if (s.round > s.bestRound) s.bestRound = s.round
     s.events.push({ t: 'roundClear' })
-    if (s.round >= ROUNDS.length) {
-      s.phase = 'won'
-    } else {
-      s.phase = 'build'
-    }
+    // Beating the scripted campaign is a milestone, not an ending — endless
+    // continues. Only running out of lives ends a run.
+    if (s.round === ROUNDS.length) s.events.push({ t: 'campaignClear' })
+    s.phase = 'build'
+    s.buildStartTick = s.tick
   }
 }
 
@@ -332,6 +351,13 @@ function checkRoundEnd(s: SimState): void {
 
 export function kernelWorld(k: Kernel): { x: number; y: number } {
   return kernelPos(k)
+}
+
+/** Travel heading (radians) at a kernel's position — for facing sprites. */
+export function kernelHeading(k: Kernel): number {
+  const a = pointAt(PATH, k.dist)
+  const b = pointAt(PATH, Math.min(PATH.total, k.dist + 4))
+  return Math.atan2(b.y - a.y, b.x - a.x)
 }
 
 export function targetPolicies(): TargetPolicy[] {

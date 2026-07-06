@@ -4,8 +4,13 @@ export const TPS = 30 // fixed timestep: ticks per second
 export const DT = 1 / TPS
 
 export const WORLD_W = 640
-export const WORLD_H = 420
+export const WORLD_H = 640 // near-square board fills phones far better than the old 420
 export const TILE = 32
+
+/** Ticks after a round clears during which starting early still pays a bonus. */
+export const EARLY_WINDOW_TICKS = 12 * TPS
+/** Max early-start bonus = this fraction of the round's clear bonus. */
+export const EARLY_BONUS_FRAC = 0.5
 
 export const START_LIVES = 100
 export const START_BUTTER = 320
@@ -94,10 +99,11 @@ export interface Projectile {
   ttl: number // ticks
 }
 
-export type Phase = 'build' | 'round' | 'won' | 'lost'
+// No 'won' terminal: beating the campaign flows into endless. Only 'lost' ends a run.
+export type Phase = 'build' | 'round' | 'lost'
 
 export interface SimEvent {
-  t: 'pop' | 'leak' | 'fire' | 'pulse' | 'beam' | 'roundClear' | 'bossIn' | 'lifeLoss'
+  t: 'pop' | 'leak' | 'fire' | 'pulse' | 'beam' | 'roundClear' | 'bossIn' | 'lifeLoss' | 'campaignClear'
   x?: number
   y?: number
   tx?: number
@@ -108,9 +114,11 @@ export interface SimEvent {
 }
 
 export interface SimState {
+  seed: number
   tick: number
   phase: Phase
   round: number // rounds cleared so far; the active/next round index
+  buildStartTick: number // tick the current build phase began (for the early bonus)
   lives: number
   butter: number
   kernels: Kernel[]
@@ -121,6 +129,7 @@ export interface SimState {
   roundActive: boolean
   popped: number
   leaked: number
+  bestRound: number // furthest round reached this run (the score)
   events: SimEvent[]
 }
 

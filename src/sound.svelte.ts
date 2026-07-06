@@ -1,28 +1,9 @@
-// Sound — Phase 0 plumbing. The renderer/controller emit playSfx(...) at every
-// game moment; Phase 1 fills /assets/sfx/<name>.ogg (generated on the local
-// asset-harness) + a settings toggle. Until then this loads whatever exists and
-// silently no-ops for the rest, so the call sites never need to change.
+// Sound — WebAudio SFX generated on the local asset-harness. The mute flag lives
+// in settings.svelte.ts (shared with the settings gear). Loads whatever exists
+// under /assets/sfx and silently no-ops for anything missing, so call sites never
+// need to change as the set grows.
 
-export const audio = $state({ sfx: loadPref('kp-sfx', true) })
-
-function loadPref(key: string, fallback: boolean): boolean {
-  try {
-    const v = localStorage.getItem(key)
-    return v === null ? fallback : v === '1'
-  } catch {
-    return fallback
-  }
-}
-
-export function setSfx(on: boolean): void {
-  audio.sfx = on
-  try {
-    localStorage.setItem('kp-sfx', on ? '1' : '0')
-  } catch {
-    /* private browsing */
-  }
-  if (on) unlock()
-}
+import { settings } from './settings.svelte.ts'
 
 export type SfxName =
   | 'pop' | 'bosspop' | 'laser' | 'microwave' | 'fire' | 'leak'
@@ -54,7 +35,7 @@ async function loadAll(): Promise<void> {
 }
 
 export function playSfx(name: SfxName): void {
-  if (!audio.sfx || ctx === null || ctx.state !== 'running') return
+  if (!settings.sfx || ctx === null || ctx.state !== 'running') return
   const buf = buffers.get(name)
   if (!buf) return
   const src = ctx.createBufferSource()

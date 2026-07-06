@@ -16,6 +16,14 @@ The record of the drive. Newest state at the top.
 - **Phase 0 — SP vertical slice** ✅ **DONE 2026-07-05**: deterministic sim + oracle,
   one map / 3 towers (fire·microwave·laser) + butter churn / 3 kernels + COB / 15 rounds /
   butter / 100 lives / build·round·win·lose / place·upgrade·sell·target UI. The fun is real.
+- **Phase 1a — playtest punch list + pop-juice** ✅ **DONE 2026-07-05** (Michael + son
+  playing): **endless freeplay** past round 15 (deterministic `getRound` escalation, best-
+  round score, no more "won" terminal) · **auto-start setting** + **early-start bonus**
+  (decays over the build window, shown on the button as `+N🧈`) · **cobs face their
+  heading** · **near-square 640×640 map** (4-run serpentine — fills phones) · **responsive
+  layout** (HUD wraps, nothing clips, full-width Start on mobile, floating tower panel) ·
+  **11 pop SFX** generated on the asset-harness + ⚙ settings mute. Oracle 32 assertions.
+  ★ **balance is soft** — 3 fire tossers held 9 rounds; early rounds need to bite harder.
 - **Phase 1 — juice + content**: pop FX/SFX (asset-harness), upgrade trees, more
   kernels (camo+detect, kettle), more maps/rounds, endless. ui-craft polish.
 - **Phase 2 — co-op MP**: server-authoritative command relay, shared kitchen, tables.

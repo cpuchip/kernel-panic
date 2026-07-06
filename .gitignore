@@ -7,3 +7,4 @@ dist/
 .playwright-cli/
 data/
 verify-*.png
+scripts/sfx_out/

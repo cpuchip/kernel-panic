@@ -8,10 +8,10 @@
 // MP correctness check).
 
 import { mulberry32, type Rng } from '../rng.ts'
-import { PATH, ROUNDS, TOWERS } from './content.ts'
+import { PATH, ROUNDS, TOWERS, getRound } from './content.ts'
 import { pointAt, distToPath } from './path.ts'
-import { apply, newGame, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
-import { START_LIVES, WORLD_H, WORLD_W, TILE, type Command, type SimState } from './types.ts'
+import { apply, earlyBonus, newGame, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
+import { EARLY_WINDOW_TICKS, START_LIVES, WORLD_H, WORLD_W, TILE, type Command, type SimState } from './types.ts'
 
 let passed = 0
 let failed = 0
@@ -75,16 +75,17 @@ function snap(s: SimState): string {
   })
 }
 
-/** Play a fixed opening layout, then auto-run rounds to a terminal phase.
+/** Play a fixed opening layout, then auto-run rounds. Stops when lost or after
+ * `stopAfterRound` rounds clear (endless never "wins", so tests set a cap).
  * `butter` overrides the starting bank for mechanics tests that don't care
  * about economy (they're testing that towers pop, not that you can afford them). */
-function playFrom(placements: Command[], seed: number, maxTicks = 120000, butter?: number): SimState {
+function playFrom(placements: Command[], seed: number, maxTicks = 120000, butter?: number, stopAfterRound = Infinity): SimState {
   const s = newGame()
   if (butter !== undefined) s.butter = butter
   const rng: Rng = mulberry32(seed)
   for (const c of placements) apply(s, c, rng)
   let guard = maxTicks
-  while (s.phase !== 'won' && s.phase !== 'lost' && guard-- > 0) {
+  while (s.phase !== 'lost' && s.round < stopAfterRound && guard-- > 0) {
     if (s.phase === 'build') apply(s, { t: 'startRound' }, rng)
     tick(s, rng)
   }
@@ -162,7 +163,7 @@ console.log('replay identity')
     for (const c of script) apply(s, c, rng)
     let guard = 5000
     let toggled = false
-    while (s.phase !== 'won' && s.phase !== 'lost' && guard-- > 0) {
+    while (s.phase !== 'lost' && guard-- > 0) {
       if (s.phase === 'build') {
         if (!toggled) {
           apply(s, { t: 'upgrade', id: 1 }, rng)
@@ -224,8 +225,8 @@ console.log('build rules')
   ok(s.butter > before && s.towers.length === 0, 'selling refunds butter and frees the tile')
 }
 
-// ── 8. A real defense wins all 15 rounds ────────────────────────────────────
-console.log('winnable')
+// ── 8. A real defense clears the campaign, then endless keeps going ──────────
+console.log('winnable + endless')
 {
   const s = newGame()
   const rng = mulberry32(11)
@@ -245,15 +246,51 @@ console.log('winnable')
       if (t.level < 1 && s.butter >= TOWERS[t.type].upgrade.cost + 250) apply(s, { t: 'upgrade', id: t.id }, rng)
     }
   }
-  let guard = 200000
-  while (s.phase !== 'won' && s.phase !== 'lost' && guard-- > 0) {
+  let sawCampaignClear = false
+  let guard = 300000
+  while (s.phase !== 'lost' && s.round < 18 && guard-- > 0) {
     if (s.phase === 'build') {
       build()
       apply(s, { t: 'startRound' }, rng)
     }
     tick(s, rng)
+    if (s.events.some((e) => e.t === 'campaignClear')) sawCampaignClear = true
   }
-  ok(s.phase === 'won', `wins all ${ROUNDS.length} rounds (ended ${s.phase}, round ${s.round}, ${s.lives} lives)`)
+  ok(s.round >= ROUNDS.length, `clears the ${ROUNDS.length}-round campaign (reached ${s.round}, ${s.lives} lives)`)
+  ok(sawCampaignClear, 'campaignClear fired once past the final scripted round')
+  ok(s.phase !== 'lost', 'no "won" terminal — endless continues past the campaign')
+  ok(s.round >= 16, 'played generated endless rounds beyond the script')
+  ok(s.bestRound === s.round, 'bestRound tracks the furthest round reached')
+}
+
+// ── 8b. Endless generator is deterministic + escalates ──────────────────────
+console.log('endless generator')
+{
+  const a = getRound(20, 1234)
+  const b = getRound(20, 1234)
+  ok(JSON.stringify(a) === JSON.stringify(b), 'getRound is deterministic for a seed+index')
+  const early = getRound(15, 1)
+  const later = getRound(25, 1)
+  const count = (r: typeof early) => r.groups.reduce((n, g) => n + g.count, 0)
+  ok(count(later) > count(early), 'later endless rounds spawn more than earlier ones')
+}
+
+// ── 8c. Early-start bonus decays and is awarded ─────────────────────────────
+console.log('early-start bonus')
+{
+  const s = newGame()
+  const atStart = earlyBonus(s) // build phase, tick 0
+  ok(atStart > 0, 'early bonus available at the start of a build phase')
+  // let the window fully elapse
+  for (let i = 0; i < EARLY_WINDOW_TICKS + 5; i++) tick(s, mulberry32(1))
+  ok(earlyBonus(s) === 0, 'early bonus decays to zero after the window')
+  // fresh game: starting immediately grabs the bonus
+  const s2 = newGame()
+  const rng = mulberry32(1)
+  const bonus = earlyBonus(s2)
+  const before = s2.butter
+  apply(s2, { t: 'startRound' }, rng)
+  ok(s2.butter === before + bonus, 'starting a round awards the current early bonus')
 }
 
 // ── 9. Kernels sit on the path ──────────────────────────────────────────────

@@ -6,17 +6,20 @@ import { buildPath, type Path } from './path.ts'
 import type { Vec2 } from '../vec.ts'
 import type { KernelType, KernelTypeId, RoundDef, TowerType } from './types.ts'
 
-// ── The map: a snake path with three straightaways for towers ────────────────
+// ── The map: a near-square boustrophedon with four straightaways ─────────────
+// (640×640 fills phone screens far better than the old wide 640×420, and the
+//  longer path gives more room for towers.)
 
 const PATH_POINTS: Vec2[] = [
-  { x: -24, y: 90 },
-  { x: 120, y: 90 },
-  { x: 120, y: 330 },
-  { x: 300, y: 330 },
-  { x: 300, y: 90 },
-  { x: 480, y: 90 },
-  { x: 480, y: 330 },
-  { x: 664, y: 330 },
+  { x: -24, y: 80 },
+  { x: 560, y: 80 },
+  { x: 560, y: 240 },
+  { x: 80, y: 240 },
+  { x: 80, y: 400 },
+  { x: 560, y: 400 },
+  { x: 560, y: 560 },
+  { x: 80, y: 560 },
+  { x: 80, y: 664 },
 ]
 
 export const PATH: Path = buildPath(PATH_POINTS)
@@ -132,6 +135,25 @@ export const ROUNDS: RoundDef[] = [
   { groups: [g('cob', 2, 220), g('caramel', 10, 34, 120)], bonus: 150 }, // 14
   { groups: [g('cob', 3, 200), g('buttered', 30, 10, 80), g('caramel', 8, 40, 400)], bonus: 300 }, // 15 finale
 ]
+
+/** Endless: rounds past the scripted campaign, escalating deterministically from
+ * the seed. Each round beyond 15 adds more kernels and more cobs. */
+export function getRound(index: number, seed: number): RoundDef {
+  if (index < ROUNDS.length) return ROUNDS[index]
+  const over = index - ROUNDS.length + 1 // 1, 2, 3, …
+  // deterministic small variation per round so endless doesn't feel identical
+  const r = ((seed ^ Math.imul(index + 1, 2654435761)) >>> 0) / 4294967296
+  const cobs = 3 + Math.floor(over / 2)
+  const buttered = 28 + over * 5
+  const caramel = 8 + over * 2
+  const gap = Math.max(6, 11 - Math.floor(over / 3))
+  const groups = [
+    g('cob', cobs, Math.max(140, 220 - over * 6)),
+    g('buttered', buttered, gap, 70),
+    g('caramel', caramel, 32 + Math.floor(r * 10), 260),
+  ]
+  return { groups, bonus: 200 + over * 20 }
+}
 
 /** Butter income of a tower at a given level (base or upgraded). */
 export function towerIncome(t: TowerType, level: number): number {

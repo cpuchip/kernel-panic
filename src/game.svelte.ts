@@ -5,16 +5,24 @@
 
 import { mulberry32, type Rng } from '../shared/rng.ts'
 import { ROUNDS, TOWERS, TOWER_ORDER, stat } from '../shared/sim/content.ts'
-import { apply, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
-import { DT, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
+import { apply, earlyBonus, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
+import { DT, TPS, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
 import { draw, type FxItem } from './render.ts'
 import { playSfx } from './sound.svelte.ts'
+import { settings } from './settings.svelte.ts'
+
+const AUTO_DELAY_TICKS = 3 * TPS // grace before auto-start fires (time to place)
+const CAMPAIGN_ROUNDS = ROUNDS.length
 
 export const ui = $state({
   lives: 0,
   butter: 0,
-  round: 0, // 1-based for display
-  totalRounds: ROUNDS.length,
+  round: 0, // 1-based, the active/next round
+  totalRounds: CAMPAIGN_ROUNDS,
+  best: 0,
+  endless: false, // past the scripted campaign
+  earlyBonus: 0, // butter you'd grab by starting now
+  banner: '', // transient celebration (campaign cleared)
   phase: 'build' as SimState['phase'],
   roundActive: false,
   speed: 1,
@@ -43,9 +51,19 @@ export function towerOrder(): TowerType[] {
 function syncUi(): void {
   ui.lives = sim.lives
   ui.butter = sim.butter
-  ui.round = Math.min(sim.round + (sim.phase === 'round' ? 1 : 1), ROUNDS.length)
+  ui.round = sim.round + 1 // the active/next round, 1-based (endless goes past 15)
+  ui.best = sim.bestRound
+  ui.endless = sim.round >= CAMPAIGN_ROUNDS
+  ui.earlyBonus = earlyBonus(sim)
   ui.phase = sim.phase
   ui.roundActive = sim.roundActive
+}
+
+let bannerTimer: ReturnType<typeof setTimeout> | null = null
+function showBanner(msg: string): void {
+  ui.banner = msg
+  if (bannerTimer) clearTimeout(bannerTimer)
+  bannerTimer = setTimeout(() => (ui.banner = ''), 5000)
 }
 
 function flashError(msg: string): void {
@@ -98,6 +116,11 @@ function loop(now: number): void {
     steps++
   }
   if (steps > 0) syncUi()
+  // auto-start the next round after a short grace, if enabled
+  if (sim.phase === 'build' && settings.autoStart && sim.tick - sim.buildStartTick >= AUTO_DELAY_TICKS) {
+    dispatch({ t: 'startRound' })
+    playSfx('start')
+  }
   advanceFx(realDt)
   if (ctx) {
     draw(ctx, sim, {
@@ -133,6 +156,10 @@ function ingestEvents(): void {
         playSfx('leak')
         break
       case 'roundClear':
+        playSfx('roundclear')
+        break
+      case 'campaignClear':
+        showBanner('🏆 Campaign cleared! Endless mode — how far can you go?')
         playSfx('roundclear')
         break
       case 'bossIn':
@@ -211,6 +238,11 @@ export function selectType(id: string): void {
 
 export function cancelPlacing(): void {
   ui.placingType = null
+}
+
+export function deselect(): void {
+  ui.selectedId = null
+  ui.version++
 }
 
 export function selectedTower() {
