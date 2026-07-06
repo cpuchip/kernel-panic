@@ -42,5 +42,7 @@ The record of the drive. Newest state at the top.
 ## Balance notes (for playtest)
 
 - Start: 100 lives, 320 butter. Towers 100/250/320/400; one upgrade each. Round-clear
-  bonus 30→300; pop bounties 3-60. The oracle's 10-tower plan wins 15/15 with 0 leaks —
-  difficulty may be soft; tune round counts / kernel HP / tower cost from real play.
+  bonus 30→300; pop bounties 3-60. **Confirmed soft in play (2026-07-05):** 3 fire tossers
+  held to round 9 losing only one cob's worth of lives. Early rounds (1-7) are trivially
+  easy — raise early kernel counts/speed or cut starting butter so the first cob actually
+  threatens. Endless escalation exists but ramps gently. Next-increment tuning job.
