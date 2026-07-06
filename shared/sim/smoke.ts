@@ -313,10 +313,10 @@ console.log('balance floor')
   ok(s.phase === 'lost' || s.lives < START_LIVES, `a 2-tower defense can't coast (ended ${s.phase}, round ${s.round}, ${s.lives} lives)`)
 }
 
-// ── 8e. Laser resistance: a Corn Bunch shrugs off the beam, a Corn Cob doesn't ─
+// ── 8e. Laser resistance: a Shiney Kernel bounces the beam, a Corn Cob doesn't ─
 console.log('laser resistance')
 {
-  function laserHits(kernelType: 'bunch' | 'cob'): { before: number; after: number } {
+  function laserHits(kernelType: 'shiney' | 'cob'): { before: number; after: number } {
     const s = newGame()
     s.butter = 5000
     const rng = mulberry32(1)
@@ -339,9 +339,9 @@ console.log('laser resistance')
     const k = s.kernels.find((x) => x.type === kernelType)
     return { before, after: k ? k.hp : 0 }
   }
-  const bunch = laserHits('bunch')
+  const shiney = laserHits('shiney')
   const cob = laserHits('cob')
-  ok(bunch.after === bunch.before, 'laser does NOT damage a Corn Bunch (resistLaser)')
+  ok(shiney.after === shiney.before, 'laser does NOT damage a Shiney Kernel (resistLaser)')
   ok(cob.after < cob.before, 'laser DOES damage a Corn Cob')
 }
 

@@ -44,7 +44,7 @@ export const KERNELS: Record<KernelTypeId, KernelType> = {
   },
   bunch: {
     id: 'bunch', name: 'Corn Bunch', hp: 50, speed: 50, bounty: 20, leak: 50, radius: 19, color: '#e0b53a',
-    cobShape: true, resistLaser: true,
+    cobShape: true,
     children: { type: 'cob', count: 4, spread: 16 },
   },
   ton: {
@@ -55,6 +55,7 @@ export const KERNELS: Record<KernelTypeId, KernelType> = {
   // ── Bonus mobs ──
   shiney: {
     id: 'shiney', name: 'Shiney Kernel', hp: 5, speed: 100, bounty: 10, leak: 5, radius: 9, color: '#fff3b0',
+    resistLaser: true, // the shiny coat bounces the beam right off
     children: { type: 'kernel', count: 1, spread: 10 },
   },
   // The buttery trio: leak 0 (can't hurt you), huge bounty, very fast — catch them for the payout.
@@ -110,7 +111,7 @@ export const TOWERS: Record<string, TowerType> = {
     damage: 2,
     color: '#ff4d6d',
     beamWidth: 12,
-    blurb: 'Piercing beam down a line. Loves straightaways — but Corn Bunches shrug it off.',
+    blurb: 'Piercing beam down a line. Loves straightaways — but Shiney Kernels bounce it off.',
     upgrades: [
       { name: 'Focus Lens', cost: 300, patch: { cooldown: 0.6, damage: 5, beamWidth: 16 } },
       { name: 'Death Ray', cost: 680, patch: { cooldown: 0.45, damage: 12, beamWidth: 20 } },

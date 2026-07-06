@@ -21,14 +21,14 @@ Corn ton ──4──▶ Corn Bunch ──4──▶ Corn cob ──4──▶ 
 | Corn kernel | common | 125 | 2 | 2 | 2 | 1× Poppable corn kernel | |
 | Hard kernel | common | 150 | 3 | 3 | 3 | 1× Corn kernel | fastest small mob |
 | Corn cob | common | 75 | 20 | 10 | 20 | 4× Hard kernel | first "fat" mob |
-| Corn Bunch | very rare ★ | 50 | 50 | 20 | 50 | 4× Corn cob | **resistant to laser** |
+| Corn Bunch | very rare ★ | 50 | 50 | 20 | 50 | 4× Corn cob | |
 | Corn ton | rarest ★★ | 25 | 100 | 50 | 100 | 4× Corn Bunch | "16 corn models" — the big boss |
 
 ## Bonus / special mobs (off the main chain)
 
 | Mob | Rarity | Speed | HP | Butter | D | Pops into | Notes |
 |-----|--------|------:|---:|-------:|--:|-----------|-------|
-| Shiney kernel | rare ◆ | 100 | 5 | 10 | 5 | 1× Corn kernel | *(per your example: shiny → corn kernel → poppable)* |
+| Shiney kernel | rare ◆ | 100 | 5 | 10 | 5 | 1× Corn kernel | **resistant to laser** (the shiny coat bounces the beam) |
 | Buttery corn kernel | rarest ★★ | 500 | 8 | **1,000** | 0 | — | butter piñata, harmless but very fast |
 | Buttery pop corn | rarest ★★ | 750 | 12 | **2,500** | 0 | — | fastest mob; huge reward |
 | Buttery corn cob | rarest ★★ | 500 | 50 | **10,000** | 0 | — | jackpot; must catch before it escapes |
@@ -44,8 +44,9 @@ Corn ton ──4──▶ Corn Bunch ──4──▶ Corn cob ──4──▶ 
   the fat mobs. The big three are slow (Corn cob 75 → Bunch 50 → ton 25).
 - **The Buttery trio deal 0 damage** — they can't kill you, they're pure butter jackpots that
   rush past fast; the tension is catching them for the reward before they reach the bowl.
-- **Corn Bunch resists laser** — a tower-interaction property (like a lead bloon). Worth
-  giving another mob a different resistance later so no single tower is a catch-all.
+- **Shiney Kernel resists laser** — a tower-interaction property (like a lead bloon): the
+  shiny coat bounces the beam, so you need fire or microwave for it. Worth giving another mob
+  a different resistance later so no single tower is a catch-all.
 
 ## Ambiguities to confirm with the artist
 
