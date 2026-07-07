@@ -36,11 +36,30 @@ Range values (1.25, 1.50) read as **multipliers on the base range** (×1.25, ×1
 
 ## Butter Churner — cost 1500 · Bpr 250 (economy, no attack)
 
-One deep path (it only does one thing — make butter):
+Now a **three-path crosspath like the attacking towers — invest in at most 2** (Michael
+confirmed the two new paths, 2026-07-06). Path 1 is the original flat income; paths 2 and 3
+are the two ideas offered, "with scaling."
+
+**Path 1 — Butter (flat income each round you clear):**
 
 | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
 |--------|--------|--------|--------|
 | More Butter — Bpr 300, cost 1000 | Even More Butter — Bpr 500, cost 1250 | More More More! — Bpr 750, cost 1500 | All The BUTTER! — Bpr 1000, cost 3000 |
+
+**Path 2 — Butter Bank (interest on the butter you're HOLDING at round clear — rewards saving):**
+
+| Tier 1 | Tier 2 | Tier 3 |
+|--------|--------|--------|
+| Piggy Churn — +5%/round, cost 1000 | Savings Churn — +10%/round, cost 1500 | Compound Churn — +20%/round, cost 2500 |
+
+**Path 3 — Butter Boost (an aura; nearby attacking towers earn extra butter per pop):**
+
+| Tier 1 | Tier 2 | Tier 3 |
+|--------|--------|--------|
+| Buttery Aura — +1/pop, radius 90, cost 1200 | Golden Aura — +2/pop, radius 115, cost 2000 | Butter Storm — +3/pop, radius 140, cost 3500 |
+
+Total bank interest is capped at 50%/round so it can't run away. The Boost aura ring shows when
+the churn is selected. Numbers are DATA — Michael's/his son's to tune.
 
 ---
 

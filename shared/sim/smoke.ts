@@ -8,7 +8,8 @@
 // MP correctness check).
 
 import { mulberry32, type Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, effRange, effStat, getRound } from './content.ts'
+import { KERNELS, PATH, ROUNDS, TOWERS, effRange, effStat, getRound, tierValue, towerIncome } from './content.ts'
+import { MAPS, MAP_ORDER } from './maps.ts'
 import { pointAt, distToPath } from './path.ts'
 import { apply, earlyBonus, newGame, roundHpMul, roundSpeedMul, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
 import { EARLY_WINDOW_TICKS, START_LIVES, WORLD_H, WORLD_W, TILE, type Command, type SimState } from './types.ts'
@@ -254,8 +255,8 @@ console.log('winnable + endless')
     }
   }
   let sawCampaignClear = false
-  let guard = 300000
-  while (s.phase !== 'lost' && s.round < 18 && guard-- > 0) {
+  let guard = 400000
+  while (s.phase !== 'lost' && s.round < ROUNDS.length + 2 && guard-- > 0) {
     if (s.phase === 'build') {
       build()
       apply(s, { t: 'startRound' }, rng)
@@ -266,7 +267,7 @@ console.log('winnable + endless')
   ok(s.round >= ROUNDS.length, `clears the ${ROUNDS.length}-round campaign (reached ${s.round}, ${s.lives} lives)`)
   ok(sawCampaignClear, 'campaignClear fired once past the final scripted round')
   ok(s.phase !== 'lost', 'no "won" terminal — endless continues past the campaign')
-  ok(s.round >= 16, 'played generated endless rounds beyond the script')
+  ok(s.round > ROUNDS.length, 'played generated endless rounds beyond the script')
   ok(s.bestRound === s.round, 'bestRound tracks the furthest round reached')
 }
 
@@ -276,8 +277,8 @@ console.log('endless generator')
   const a = getRound(20, 1234)
   const b = getRound(20, 1234)
   ok(JSON.stringify(a) === JSON.stringify(b), 'getRound is deterministic for a seed+index')
-  const early = getRound(15, 1)
-  const later = getRound(25, 1)
+  const early = getRound(ROUNDS.length, 1) // first endless round
+  const later = getRound(ROUNDS.length + 10, 1)
   const count = (r: typeof early) => r.groups.reduce((n, g) => n + g.count, 0)
   ok(count(later) > count(early), 'later endless rounds spawn more than earlier ones')
 }
@@ -413,7 +414,96 @@ console.log('kernel position')
   apply(s, { t: 'startRound' }, rng)
   for (let i = 0; i < 40; i++) tick(s, rng)
   ok(s.kernels.length > 0, 'kernels spawned during a round')
-  ok(s.kernels.every((k) => distToPath(PATH, kernelWorld(k).x, kernelWorld(k).y) < 0.5), 'every kernel sits on the path')
+  ok(s.kernels.every((k) => distToPath(PATH, kernelWorld(s, k).x, kernelWorld(s, k).y) < 0.5), 'every kernel sits on the path')
+}
+
+// ── 10. Maps: every map is a valid, walkable, buildable board ────────────────
+console.log('maps')
+{
+  for (const id of MAP_ORDER) {
+    const map = MAPS[id]
+    ok(map.path.total > 0, `${id}: path has length`)
+    // path is continuous — no giant jump between sampled points
+    let maxJump = 0
+    let prev = pointAt(map.path, 0)
+    for (let d = 6; d <= map.path.total; d += 6) {
+      const p = pointAt(map.path, d)
+      maxJump = Math.max(maxJump, Math.hypot(p.x - prev.x, p.y - prev.y))
+      prev = p
+    }
+    ok(maxJump < 12, `${id}: path is continuous (max step ${maxJump.toFixed(1)})`)
+    // there are enough buildable tiles to actually play
+    const s = newGame(1, id)
+    let buildable = 0
+    for (let cy = 0; cy < Math.floor(640 / 32); cy++)
+      for (let cx = 0; cx < Math.floor(640 / 32); cx++) if (tileBuildable(s, cx, cy)) buildable++
+    ok(buildable > 40, `${id}: has room for towers (${buildable} tiles)`)
+    // a spawned kernel walks this map's path and eventually leaks
+    const s2 = newGame(1, id)
+    apply(s2, { t: 'startRound' }, mulberry32(3))
+    for (let i = 0; i < 40; i++) tick(s2, mulberry32(3))
+    ok(s2.kernels.every((k) => distToPath(map.path, kernelWorld(s2, k).x, kernelWorld(s2, k).y) < 0.5), `${id}: kernels sit on the path`)
+  }
+  // an unknown map id falls back to the default rather than crashing
+  const sBad = newGame(1, 'nope')
+  ok(sBad.mapId === 'classic', 'unknown map id falls back to classic')
+}
+
+// ── 11. Butter Churn crosspath: Bank interest + Boost aura ───────────────────
+console.log('churn bank + boost')
+{
+  const churn = TOWERS.churn
+  ok(churn.maxPaths === 2 && churn.paths.length === 3, 'churn has 3 paths, pick 2')
+  // Butter Bank pays interest on held butter at round clear
+  const s = newGame()
+  const rng = mulberry32(5)
+  s.butter = 100000
+  apply(s, { t: 'place', tower: 'churn', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
+  const cid = s.towers[0].id
+  const bankIdx = churn.paths.findIndex((p) => p.key === 'bank')
+  apply(s, { t: 'upgrade', id: cid, path: bankIdx }, rng) // Piggy Churn: 5% interest
+  ok(tierValue(churn, s.towers[0].pathLevels, 'interest') === 0.05, 'bank path sets 5% interest')
+  // clear a round with a known balance → interest is credited (on top of the
+  // round bonus and the churn's flat base income).
+  s.butter = 1000
+  s.round = 2
+  s.phase = 'round'
+  s.roundActive = true
+  s.spawnQueue = []
+  s.kernels = []
+  const before = s.butter
+  tick(s, rng) // checkRoundEnd runs inside tick when the wave is empty
+  const def = getRound(2, s.seed)
+  const baseIncome = towerIncome(churn, s.towers[0].pathLevels) // flat churn base (250)
+  ok(s.butter === before + def.bonus + baseIncome + Math.floor(before * 0.05), 'round clear credits 5% interest on held butter')
+
+  // Butter Boost tips extra butter per pop inside the aura
+  const s2 = newGame()
+  const rng2 = mulberry32(6)
+  s2.butter = 100000
+  apply(s2, { t: 'place', tower: 'churn', cx: NEAR[0][0], cy: NEAR[0][1] }, rng2)
+  const boostIdx = churn.paths.findIndex((p) => p.key === 'boost')
+  apply(s2, { t: 'upgrade', id: s2.towers[0].id, path: boostIdx }, rng2) // Buttery Aura: +1/pop, r90
+  ok(tierValue(churn, s2.towers[0].pathLevels, 'boostPerPop') === 1, 'boost path sets +1 butter/pop')
+  // a poppable dying near the churn earns bounty(1) + boost(1). Find the path
+  // distance whose point is closest to the churn (well inside the r90 aura).
+  const churnTower = s2.towers[0]
+  const path = MAPS[s2.mapId].path
+  let nearDist = 0
+  let nearBest = Infinity
+  for (let d = 0; d <= path.total; d += 2) {
+    const p = pointAt(path, d)
+    const dd = Math.hypot(p.x - churnTower.x, p.y - churnTower.y)
+    if (dd < nearBest) { nearBest = dd; nearDist = d }
+  }
+  ok(nearBest <= 90, 'churn aura reaches its nearest path point')
+  s2.kernels = [{ id: s2.nextId++, type: 'poppable', dist: nearDist, hp: 0 }]
+  s2.butter = 0
+  s2.phase = 'round'
+  s2.roundActive = true
+  s2.spawnQueue = [{ type: 'poppable', atTick: s2.tick + 999 }] // keep the round from ending
+  tick(s2, rng2) // the death pass credits bounty(1) + boost(1)
+  ok(s2.butter >= 2, 'pop inside the aura pays bounty + boost')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

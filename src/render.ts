@@ -2,7 +2,9 @@
 // Phase 0 is shapes (art comes in Phase 1 via the asset harness). Kernels =
 // kernels, cobs = bosses, towers by kind, plus transient FX from sim events.
 
-import { KERNELS, PATH, TOWERS, effRange } from '../shared/sim/content.ts'
+import { KERNELS, TOWERS, effRange, tierValue } from '../shared/sim/content.ts'
+import { MAPS, DEFAULT_MAP } from '../shared/sim/maps.ts'
+import type { Path } from '../shared/sim/path.ts'
 import { kernelHeading, kernelWorld, tileBuildable, tileCenter } from '../shared/sim/sim.ts'
 import { TILE, WORLD_H, WORLD_W, type SimState, type Tower } from '../shared/sim/types.ts'
 
@@ -51,7 +53,7 @@ function drawSpriteFit(ctx: CanvasRenderingContext2D, img: HTMLImageElement, siz
 
 export function draw(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   background(ctx)
-  drawPath(ctx)
+  drawPath(ctx, (MAPS[s.mapId] ?? MAPS[DEFAULT_MAP]).path)
   if (v.placingType) buildableHints(ctx, s)
   drawTowers(ctx, s, v)
   drawKernels(ctx, s)
@@ -71,28 +73,28 @@ function background(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(0, 0, WORLD_W, WORLD_H)
 }
 
-function drawPath(ctx: CanvasRenderingContext2D): void {
+function drawPath(ctx: CanvasRenderingContext2D, path: Path): void {
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   // outer band (counter)
   ctx.strokeStyle = '#41301d'
   ctx.lineWidth = 36
-  tracePath(ctx)
+  tracePath(ctx, path)
   ctx.stroke()
   // inner track
   ctx.strokeStyle = '#523c24'
   ctx.lineWidth = 26
-  tracePath(ctx)
+  tracePath(ctx, path)
   ctx.stroke()
   // dashed center line
   ctx.setLineDash([6, 12])
   ctx.strokeStyle = 'rgba(244,213,141,0.25)'
   ctx.lineWidth = 2
-  tracePath(ctx)
+  tracePath(ctx, path)
   ctx.stroke()
   ctx.setLineDash([])
   // the bowl at the end
-  const end = PATH.points[PATH.points.length - 1]
+  const end = path.points[path.points.length - 1]
   ctx.fillStyle = '#2c2113'
   ctx.beginPath()
   ctx.arc(end.x - 14, end.y, 26, 0, Math.PI * 2)
@@ -104,10 +106,10 @@ function drawPath(ctx: CanvasRenderingContext2D): void {
   ctx.fillText('🥣', end.x - 14, end.y)
 }
 
-function tracePath(ctx: CanvasRenderingContext2D): void {
+function tracePath(ctx: CanvasRenderingContext2D, path: Path): void {
   ctx.beginPath()
-  ctx.moveTo(PATH.points[0].x, PATH.points[0].y)
-  for (let i = 1; i < PATH.points.length; i++) ctx.lineTo(PATH.points[i].x, PATH.points[i].y)
+  ctx.moveTo(path.points[0].x, path.points[0].y)
+  for (let i = 1; i < path.points.length; i++) ctx.lineTo(path.points[i].x, path.points[i].y)
 }
 
 function buildableHints(ctx: CanvasRenderingContext2D, s: SimState): void {
@@ -171,12 +173,23 @@ function towerBody(ctx: CanvasRenderingContext2D, t: Tower): void {
 function drawTowers(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   for (const t of s.towers) {
     const def = TOWERS[t.type]
-    if ((v.selectedId === t.id) && def.kind !== 'econ') {
-      const range = effRange(def, t.pathLevels)
-      ctx.fillStyle = 'rgba(255,209,102,0.08)'
-      ctx.strokeStyle = 'rgba(255,209,102,0.4)'
-      ctx.lineWidth = 1.5
-      ctx.beginPath(); ctx.arc(t.x, t.y, range, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    if (v.selectedId === t.id) {
+      if (def.kind !== 'econ') {
+        const range = effRange(def, t.pathLevels)
+        ctx.fillStyle = 'rgba(255,209,102,0.08)'
+        ctx.strokeStyle = 'rgba(255,209,102,0.4)'
+        ctx.lineWidth = 1.5
+        ctx.beginPath(); ctx.arc(t.x, t.y, range, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      } else {
+        // Butter Churn: show the Butter Boost aura (if that path is bought).
+        const boost = tierValue(def, t.pathLevels, 'boostRadius')
+        if (boost > 0) {
+          ctx.fillStyle = 'rgba(242,210,80,0.10)'
+          ctx.strokeStyle = 'rgba(242,210,80,0.45)'
+          ctx.lineWidth = 1.5
+          ctx.beginPath(); ctx.arc(t.x, t.y, boost, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+        }
+      }
     }
     towerBody(ctx, t)
   }
@@ -192,16 +205,16 @@ const KERNEL_SPRITE: Record<string, string> = {
 function drawKernels(ctx: CanvasRenderingContext2D, s: SimState): void {
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
-    const p = kernelWorld(k)
+    const p = kernelWorld(s, k)
     const img = sprite(KERNEL_SPRITE[k.type] ?? k.type)
     ctx.save()
     ctx.translate(p.x, p.y)
     if (img) {
       // cob-shaped mobs' art faces right; rotate it to the travel heading
-      if (kt.cobShape) ctx.rotate(kernelHeading(k))
+      if (kt.cobShape) ctx.rotate(kernelHeading(s, k))
       drawSpriteFit(ctx, img, kt.radius * 2.9)
     } else if (kt.cobShape) {
-      ctx.rotate(kernelHeading(k))
+      ctx.rotate(kernelHeading(s, k))
       ctx.fillStyle = '#7a9a3a'
       ctx.beginPath(); ellipse(ctx, -kt.radius * 0.5, 0, kt.radius + 6, kt.radius - 1); ctx.fill()
       ctx.fillStyle = kt.color

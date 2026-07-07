@@ -5,6 +5,7 @@
 
 import { mulberry32, type Rng } from '../shared/rng.ts'
 import { ROUNDS, TOWERS, TOWER_ORDER, towerSpent } from '../shared/sim/content.ts'
+import { DEFAULT_MAP, MAPS, MAP_ORDER, type GameMap } from '../shared/sim/maps.ts'
 import { apply, earlyBonus, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
 import { DT, TPS, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
 import { draw, type FxItem } from './render.ts'
@@ -15,6 +16,8 @@ const AUTO_DELAY_TICKS = 3 * TPS // grace before auto-start fires (time to place
 const CAMPAIGN_ROUNDS = ROUNDS.length
 
 export const ui = $state({
+  screen: 'menu' as 'menu' | 'playing', // map picker vs. the board
+  mapId: DEFAULT_MAP,
   lives: 0,
   butter: 0,
   round: 0, // 1-based, the active/next round
@@ -106,6 +109,11 @@ function loop(now: number): void {
   raf = requestAnimationFrame(loop)
   const realDt = Math.min((now - last) / 1000, 0.1)
   last = now
+  // Menu up: hold the sim, just paint the empty board behind the picker.
+  if (ui.screen !== 'playing') {
+    if (ctx) draw(ctx, sim, { hoverTile: null, placingType: null, selectedId: null, canPlace: false, fx })
+    return
+  }
   const speed = ui.paused ? 0 : ui.speed
   acc += realDt * speed
   let steps = 0
@@ -305,14 +313,46 @@ export function togglePause(): void {
 }
 
 export function restart(): void {
-  sim = newGame()
+  startGame(ui.mapId)
+}
+
+// ── Maps / menu ──────────────────────────────────────────────────────────────
+
+export function mapChoices(): GameMap[] {
+  return MAP_ORDER.map((id) => MAPS[id])
+}
+
+/** SVG polyline for a map's path, clamped to the 0..640 viewBox for a preview. */
+export function mapPreviewPoints(m: GameMap): string {
+  return m.points
+    .map((p) => `${Math.max(0, Math.min(640, p.x))},${Math.max(0, Math.min(640, p.y))}`)
+    .join(' ')
+}
+
+function startGame(mapId: string): void {
+  sim = newGame(1, mapId)
   rng = mulberry32(1)
   fx.length = 0
+  ui.mapId = sim.mapId
   ui.placingType = null
   ui.selectedId = null
   ui.paused = false
   ui.speed = 1
+  ui.screen = 'playing'
   syncUi()
+  ui.version++
+}
+
+/** Pick a map from the menu and start playing it. */
+export function chooseMap(mapId: string): void {
+  startGame(mapId)
+}
+
+/** Back to the map picker (from the lost screen). */
+export function openMenu(): void {
+  ui.screen = 'menu'
+  ui.selectedId = null
+  ui.placingType = null
   ui.version++
 }
 

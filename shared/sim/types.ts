@@ -66,7 +66,7 @@ export type TargetPolicy = 'first' | 'last' | 'strong' | 'close'
 // three paths — damage / fire-rate / range — and you may invest in at most
 // `maxPaths` of them (2). A tier sets the ABSOLUTE new value for its stat; range
 // tiers give a multiplier on the base range. Butter Churn has one deep path.
-export type PathKey = 'dmg' | 'rate' | 'range' | 'butter'
+export type PathKey = 'dmg' | 'rate' | 'range' | 'butter' | 'bank' | 'boost'
 
 export interface TowerTier {
   name: string
@@ -75,6 +75,9 @@ export interface TowerTier {
   sps?: number // shots per second
   rangeMul?: number // × base range
   income?: number // butter per round (econ)
+  interest?: number // Butter Bank: fraction of held butter earned each round clear
+  boostRadius?: number // Butter Boost: aura radius (world units)
+  boostPerPop?: number // Butter Boost: extra butter per pop inside the aura
 }
 
 export interface TowerPath {
@@ -160,6 +163,7 @@ export interface SimEvent {
 
 export interface SimState {
   seed: number
+  mapId: string // which map's path the kernels walk (part of the deterministic config)
   tick: number
   phase: Phase
   round: number // rounds cleared so far; the active/next round index

@@ -50,6 +50,18 @@ The record of the drive. Newest state at the top.
   mobs get no HP scaling. Oracle 37→51 (crosspath gate, stat/range math, every scaling case);
   browser-verified (place → open 2 paths → 3rd locks). NEXT: distinct art per new mob;
   play-tuning; churn 2nd-path ideas (Butter Bank / Butter Boost aura).
+- **Phase 1e — 4 new maps + map-select, 20-wave chart, Butter Churn crosspath** ✅ **DONE
+  2026-07-06** (two more of his sheets, `docs/wave-and-map-design.md`): **four new maps** —
+  Twisty (switchback staircase), Corn Meadow (meander + loop), **Loop-de-doop** (a genuine
+  self-crossing loop-de-loop), Triangle Chaos (sharp sawtooth) — plus the Classic serpentine,
+  behind a **map picker** with SVG path previews. Map is part of the deterministic config
+  (`SimState.mapId`), so MP/replay is unaffected. **Wave chart rewritten to his exact 20 waves**
+  (then Free Play). **Butter Churn is now a 3-path crosspath** (pick 2): flat income + **Butter
+  Bank** (interest on held butter, capped 50%) + **Butter Boost** (aura tips nearby towers extra
+  butter/pop; ring shows when selected). Oracle 51→78 (every map valid/walkable/buildable, bank
+  interest, boost aura, 20-wave winnable to r22). Browser-verified: picker + loop-de-doop renders
+  and kernels traverse the crossing live. NEXT: distinct art per mob; play-tuning; per-map
+  economy balance.
 - **Phase 1 — juice + content**: pop FX/SFX (asset-harness), upgrade trees, more
   kernels (camo+detect, kettle), more maps/rounds, endless. ui-craft polish.
 - **Phase 2 — co-op MP**: server-authoritative command relay, shared kitchen, tables.

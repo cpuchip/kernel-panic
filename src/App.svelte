@@ -4,6 +4,7 @@
     ui, start, stop, onPointerMove, onPointerLeave, onCanvasClick,
     selectType, selectedTower, upgradeSelected, sellSelected, setTargetSelected,
     startRound, setSpeed, togglePause, restart, towerOrder, deselect,
+    mapChoices, mapPreviewPoints, chooseMap, openMenu,
   } from './game.svelte.ts'
   import Settings from './Settings.svelte'
   import type { TargetPolicy } from '../shared/sim/types.ts'
@@ -16,6 +17,7 @@
   })
 
   const towers = towerOrder()
+  const maps = mapChoices()
   const policies: { id: TargetPolicy; label: string }[] = [
     { id: 'first', label: 'First' },
     { id: 'last', label: 'Last' },
@@ -123,7 +125,31 @@
       <div class="panel end">
         <h2>🍿 The kitchen fell</h2>
         <p>The kernels overran you on round {ui.round}.{#if ui.best > 0} Best run: round {ui.best}.{/if} Butter up and try again.</p>
-        <button class="primary" onclick={restart}>Play again</button>
+        <div class="end-actions">
+          <button class="primary" onclick={restart}>Play again</button>
+          <button onclick={openMenu}>Change map</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if ui.screen === 'menu'}
+    <div class="overlay menu">
+      <div class="panel pick">
+        <h2>🍿 kernel panic</h2>
+        <p class="sub">Pick a kitchen — pop the corn before it pops you.</p>
+        <div class="mapgrid">
+          {#each maps as m (m.id)}
+            <button class="mapcard" onclick={() => chooseMap(m.id)}>
+              <svg viewBox="0 0 640 640" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                <rect x="4" y="4" width="632" height="632" rx="28" class="mapbg" />
+                <polyline points={mapPreviewPoints(m)} class="mapline" />
+              </svg>
+              <span class="mapname">{m.name}</span>
+              <span class="mapblurb">{m.blurb}</span>
+            </button>
+          {/each}
+        </div>
       </div>
     </div>
   {/if}
@@ -278,6 +304,34 @@
   }
   .end { text-align: center; display: flex; flex-direction: column; gap: 12px; min-width: min(400px, 88vw); }
   .end h2 { color: var(--pop); }
+  .end-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+  /* ── Map picker ────────────────────────────────────────────────────────── */
+  .menu { z-index: 40; }
+  .pick { text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: min(640px, 94vw); max-height: 92dvh; overflow-y: auto; }
+  .pick h2 { color: var(--pop); text-transform: lowercase; letter-spacing: 0.03em; }
+  .pick .sub { color: var(--dim); font-size: 14px; margin-top: -4px; }
+  .mapgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .mapcard {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 8px;
+    text-align: left;
+    background: rgba(28,20,14,0.6);
+  }
+  .mapcard:hover { border-color: var(--pop); box-shadow: 0 0 12px rgba(255,138,76,0.25); }
+  .mapcard svg { width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 8px; }
+  .mapbg { fill: #1b1410; stroke: var(--line); stroke-width: 2; }
+  .mapline { fill: none; stroke: var(--pop); stroke-width: 22; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; }
+  .mapname { font-weight: 700; font-size: 14px; }
+  .mapblurb { font-size: 11px; color: var(--dim); line-height: 1.25; }
 
   .ver { position: fixed; bottom: 3px; right: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
 

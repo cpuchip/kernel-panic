@@ -2,27 +2,11 @@
 // churn, three kernel varieties + one cob boss, ~15 rounds. All DATA: adding a
 // tower/kernel/round is authoring, not engine work.
 
-import { buildPath, type Path } from './path.ts'
-import type { Vec2 } from '../vec.ts'
 import type { KernelType, KernelTypeId, RoundDef, TowerType } from './types.ts'
 
-// ── The map: a near-square boustrophedon with four straightaways ─────────────
-// (640×640 fills phone screens far better than the old wide 640×420, and the
-//  longer path gives more room for towers.)
-
-const PATH_POINTS: Vec2[] = [
-  { x: -24, y: 80 },
-  { x: 560, y: 80 },
-  { x: 560, y: 240 },
-  { x: 80, y: 240 },
-  { x: 80, y: 400 },
-  { x: 560, y: 400 },
-  { x: 560, y: 560 },
-  { x: 80, y: 560 },
-  { x: 80, y: 664 },
-]
-
-export const PATH: Path = buildPath(PATH_POINTS)
+// The map is now data in maps.ts (Michael's son drew four; the classic kitchen
+// is the default). PATH is re-exported for the oracle's path tests.
+export { PATH } from './maps.ts'
 
 // ── Enemies (Michael's son's design — docs/enemy-design.md) ──────────────────
 // The main pop-chain, biggest first. Speeds are the sheet's numbers (small mobs
@@ -130,14 +114,27 @@ export const TOWERS: Record<string, TowerType> = {
   },
   churn: {
     id: 'churn', name: 'Butter Churn', kind: 'econ',
-    cost: 1500, dph: 0, sps: 0, pierce: 0, range: 0, income: 250, color: '#f2e2b0', maxPaths: 1,
-    blurb: 'No attack. Churns out butter every round you clear.',
+    cost: 1500, dph: 0, sps: 0, pierce: 0, range: 0, income: 250, color: '#f2e2b0', maxPaths: 2,
+    blurb: 'No attack. Churns out butter every round — now with three paths (pick 2).',
     paths: [
+      // Path 1 — flat income each round you clear (the original churn).
       { key: 'butter', label: 'Butter', tiers: [
         { name: 'More Butter', cost: 1000, income: 300 },
         { name: 'Even More Butter', cost: 1250, income: 500 },
         { name: 'More More More!', cost: 1500, income: 750 },
         { name: 'All The BUTTER!', cost: 3000, income: 1000 },
+      ] },
+      // Path 2 — Butter Bank: interest on the butter you're holding at round clear.
+      { key: 'bank', label: 'Butter Bank', tiers: [
+        { name: 'Piggy Churn', cost: 1000, interest: 0.05 },
+        { name: 'Savings Churn', cost: 1500, interest: 0.10 },
+        { name: 'Compound Churn', cost: 2500, interest: 0.20 },
+      ] },
+      // Path 3 — Butter Boost: an aura that tips nearby attacking towers extra butter per pop.
+      { key: 'boost', label: 'Butter Boost', tiers: [
+        { name: 'Buttery Aura', cost: 1200, boostRadius: 90, boostPerPop: 1 },
+        { name: 'Golden Aura', cost: 2000, boostRadius: 115, boostPerPop: 2 },
+        { name: 'Butter Storm', cost: 3500, boostRadius: 140, boostPerPop: 3 },
       ] },
     ],
   },
@@ -145,30 +142,38 @@ export const TOWERS: Record<string, TowerType> = {
 
 export const TOWER_ORDER = ['fire', 'microwave', 'laser', 'churn'] as const
 
-// ── Rounds (~15, escalating) — the new roster ────────────────────────────────
-// Counts are modest because every mob pops into a chain of children (one Corn
-// Cob = 4 Hard = a dozen+ smaller kernels). Tune these numbers freely.
+// ── Waves 1-20 — Michael's son's wave chart (2026-07-06) ─────────────────────
+// Transcribed exactly from his hand-drawn sheet: per-wave counts are HIS; the
+// spawn timing (gaps/delays) and clear bonuses are tuned to keep it winnable.
+// After wave 20 it's Free Play (the endless generator below). Every mob pops
+// into a chain of children, so a single Corn Cob is really 4 Hard = a dozen+
+// small kernels. Counts/bonuses are DATA — his to tune.
 
 function g(type: KernelTypeId, count: number, gap: number, delay = 0) {
   return { type, count, gap, delay }
 }
 
 export const ROUNDS: RoundDef[] = [
-  { groups: [g('poppable', 12, 22)], bonus: 60 }, // 1
-  { groups: [g('poppable', 16, 16), g('kernel', 5, 26, 200)], bonus: 70 }, // 2
-  { groups: [g('kernel', 14, 16)], bonus: 80 }, // 3
-  { groups: [g('kernel', 12, 14), g('hard', 6, 26, 160)], bonus: 95 }, // 4
-  { groups: [g('hard', 12, 16), g('shiney', 2, 60, 120)], bonus: 110 }, // 5
-  { groups: [g('hard', 10, 14), g('cob', 2, 90, 140)], bonus: 130 }, // 6
-  { groups: [g('cob', 3, 80), g('bkernel', 1, 0, 300)], bonus: 150 }, // 7 — first buttery bonus
-  { groups: [g('cob', 4, 70), g('hard', 12, 12, 120)], bonus: 175 }, // 8
-  { groups: [g('cob', 3, 80), g('shiney', 3, 50, 100), g('bpopcorn', 1, 0, 400)], bonus: 200 }, // 9
-  { groups: [g('bunch', 2, 200), g('cob', 4, 60, 120)], bonus: 240 }, // 10 — first Corn Bunch
-  { groups: [g('bunch', 3, 180), g('hard', 16, 10, 100)], bonus: 280 }, // 11
-  { groups: [g('ton', 1, 0), g('cob', 4, 70, 180)], bonus: 360 }, // 12 — first Corn Ton
-  { groups: [g('bunch', 5, 130), g('bcob', 1, 0, 500)], bonus: 320 }, // 13 — jackpot
-  { groups: [g('ton', 2, 260), g('bunch', 4, 120, 120)], bonus: 450 }, // 14
-  { groups: [g('ton', 3, 220), g('bunch', 6, 90, 100), g('bkernel', 2, 200, 500)], bonus: 800 }, // 15 finale
+  { groups: [g('poppable', 10, 20)], bonus: 60 }, // 1
+  { groups: [g('poppable', 20, 16)], bonus: 70 }, // 2
+  { groups: [g('poppable', 25, 14), g('kernel', 5, 30, 120)], bonus: 80 }, // 3
+  { groups: [g('poppable', 30, 12), g('kernel', 10, 22, 120)], bonus: 95 }, // 4
+  { groups: [g('poppable', 15, 16), g('hard', 3, 40, 120), g('bkernel', 1, 0, 260)], bonus: 120 }, // 5 — first buttery
+  { groups: [g('poppable', 20, 12), g('kernel', 15, 16, 120), g('hard', 10, 24, 320)], bonus: 140 }, // 6
+  { groups: [g('hard', 20, 16)], bonus: 150 }, // 7
+  { groups: [g('poppable', 50, 8)], bonus: 170 }, // 8
+  { groups: [g('shiney', 5, 40)], bonus: 160 }, // 9 — laser-proof
+  { groups: [g('kernel', 50, 10)], bonus: 220 }, // 10
+  { groups: [g('poppable', 25, 10), g('kernel', 20, 14, 150), g('hard', 15, 20, 360), g('bkernel', 1, 0, 300)], bonus: 280 }, // 11
+  { groups: [g('hard', 15, 18), g('kernel', 20, 12, 200), g('shiney', 10, 30, 420)], bonus: 300 }, // 12
+  { groups: [g('poppable', 60, 7), g('kernel', 40, 9, 160), g('hard', 25, 16, 380)], bonus: 360 }, // 13
+  { groups: [g('poppable', 100, 5)], bonus: 340 }, // 14
+  { groups: [g('cob', 1, 0)], bonus: 300 }, // 15 — first Corn Cob
+  { groups: [g('hard', 20, 14), g('kernel', 25, 10, 140), g('cob', 1, 0, 360)], bonus: 420 }, // 16
+  { groups: [g('cob', 2, 120)], bonus: 480 }, // 17
+  { groups: [g('kernel', 100, 6)], bonus: 520 }, // 18
+  { groups: [g('cob', 3, 110)], bonus: 640 }, // 19
+  { groups: [g('bunch', 1, 0), g('bpopcorn', 1, 0, 240)], bonus: 900 }, // 20 — Corn Bunch + buttery jackpot
 ]
 
 /** Endless: rounds past the campaign, escalating deterministically from seed. */
@@ -213,6 +218,19 @@ export function effRange(t: TowerType, levels: number[]): number {
 
 export function towerIncome(t: TowerType, levels: number[]): number {
   return effStat(t, levels, 'income')
+}
+
+/** Last value of an arbitrary tier field across bought tiers (0 if unbought).
+ * Used for the Butter Churn's Bank (interest) and Boost (aura) paths. */
+export function tierValue(t: TowerType, levels: number[], key: 'interest' | 'boostRadius' | 'boostPerPop'): number {
+  let v = 0
+  t.paths.forEach((p, i) => {
+    for (let tier = 0; tier < (levels[i] ?? 0); tier++) {
+      const val = p.tiers[tier][key]
+      if (val !== undefined) v = val
+    }
+  })
+  return v
 }
 
 /** How many paths have at least one tier bought (the crosspath "pick 2" gate). */

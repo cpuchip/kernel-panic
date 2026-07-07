@@ -4,8 +4,9 @@
 
 import { dist, pointSegDist } from '../vec.ts'
 import type { Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, activePaths, effRange, effStat, getRound, towerIncome, towerSpent } from './content.ts'
-import { distToPath, pointAt } from './path.ts'
+import { KERNELS, ROUNDS, TOWERS, activePaths, effRange, effStat, getRound, tierValue, towerIncome, towerSpent } from './content.ts'
+import { DEFAULT_MAP, MAPS } from './maps.ts'
+import { distToPath, pointAt, type Path } from './path.ts'
 import {
   DIFFICULTY_SCALE_PER_ROUND,
   DIFFICULTY_SCALE_START,
@@ -33,6 +34,12 @@ function fail(msg: string): never {
 
 const BUILD_CLEARANCE = 22 // world units a tower must sit off the path
 const HIT_RADIUS = 6 // dart collision padding beyond kernel radius
+const MAX_INTEREST_RATE = 0.5 // Butter Bank: cap total interest so it can't run away
+
+/** The path the kernels walk this game (chosen at newGame, part of the config). */
+function pathOf(s: SimState): Path {
+  return (MAPS[s.mapId] ?? MAPS[DEFAULT_MAP]).path
+}
 
 // ── Endless difficulty scaling (round 20+, compounding +2%/round) ────────────
 const cobFamily = (type: KernelTypeId): boolean => type === 'cob' || type === 'bunch' || type === 'ton'
@@ -54,9 +61,10 @@ function activeRound(s: SimState): number {
   return s.round + 1
 }
 
-export function newGame(seed = 1): SimState {
+export function newGame(seed = 1, mapId: string = DEFAULT_MAP): SimState {
   return {
     seed,
+    mapId: MAPS[mapId] ? mapId : DEFAULT_MAP,
     tick: 0,
     phase: 'build',
     round: 0,
@@ -96,7 +104,7 @@ export function tileCenter(cx: number, cy: number): { x: number; y: number } {
 export function tileBuildable(s: SimState, cx: number, cy: number): boolean {
   const { x, y } = tileCenter(cx, cy)
   if (x < 0 || y < 0 || x > WORLD_W || y > WORLD_H) return false
-  if (distToPath(PATH, x, y) < BUILD_CLEARANCE) return false
+  if (distToPath(pathOf(s), x, y) < BUILD_CLEARANCE) return false
   return !s.towers.some((t) => t.cx === cx && t.cy === cy)
 }
 
@@ -202,15 +210,16 @@ function spawn(s: SimState): void {
 
 function advanceKernels(s: SimState): void {
   const survivors: Kernel[] = []
+  const path = pathOf(s)
   const speedMul = SPEED_SCALE * roundSpeedMul(activeRound(s))
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
     k.dist += kt.speed * speedMul * DT
-    if (k.dist >= PATH.total) {
+    if (k.dist >= path.total) {
       // leaked into the bowl
       s.lives -= kt.leak
       s.leaked++
-      const p = pointAt(PATH, PATH.total)
+      const p = pointAt(path, path.total)
       s.events.push({ t: 'leak', x: p.x, y: p.y, kind: k.type, boss: kt.boss })
       s.events.push({ t: 'lifeLoss' })
       continue
@@ -224,15 +233,15 @@ function advanceKernels(s: SimState): void {
   }
 }
 
-function kernelPos(k: Kernel): { x: number; y: number } {
-  return pointAt(PATH, k.dist)
+function kernelPos(path: Path, k: Kernel): { x: number; y: number } {
+  return pointAt(path, k.dist)
 }
 
-function pickTarget(s: SimState, t: Tower, range: number): Kernel | null {
+function pickTarget(s: SimState, path: Path, t: Tower, range: number): Kernel | null {
   let best: Kernel | null = null
   let bestScore = -Infinity
   for (const k of s.kernels) {
-    const p = kernelPos(k)
+    const p = kernelPos(path, k)
     if (dist(t.x, t.y, p.x, p.y) > range) continue
     let score: number
     switch (t.target) {
@@ -250,6 +259,7 @@ function pickTarget(s: SimState, t: Tower, range: number): Kernel | null {
 }
 
 function fireTowers(s: SimState, _rng: Rng): void {
+  const path = pathOf(s)
   for (const t of s.towers) {
     const def = TOWERS[t.type]
     if (def.kind === 'econ') continue
@@ -265,7 +275,7 @@ function fireTowers(s: SimState, _rng: Rng): void {
     if (def.kind === 'pulse') {
       // AoE ring: fire only when a kernel is in range, then damage all in range.
       const inRange = s.kernels.filter((k) => {
-        const p = kernelPos(k)
+        const p = kernelPos(path, k)
         return dist(t.x, t.y, p.x, p.y) <= range
       })
       if (inRange.length === 0) continue // hold the pulse ready
@@ -275,9 +285,9 @@ function fireTowers(s: SimState, _rng: Rng): void {
       continue
     }
 
-    const target = pickTarget(s, t, range)
+    const target = pickTarget(s, path, t, range)
     if (!target) continue
-    const tp = kernelPos(target)
+    const tp = kernelPos(path, target)
 
     if (def.kind === 'dart') {
       const d = dist(t.x, t.y, tp.x, tp.y) || 1
@@ -302,8 +312,8 @@ function fireTowers(s: SimState, _rng: Rng): void {
       const ex = t.x + (dx / len) * range
       const ey = t.y + (dy / len) * range
       for (const k of s.kernels) {
-        if (KERNELS[k.type].resistLaser) continue // Corn Bunch shrugs off the beam
-        const p = kernelPos(k)
+        if (KERNELS[k.type].resistLaser) continue // Shiney Kernel shrugs off the beam
+        const p = kernelPos(path, k)
         if (pointSegDist(p.x, p.y, t.x, t.y, ex, ey) <= width + KERNELS[k.type].radius) {
           k.hp -= dmg
         }
@@ -315,6 +325,7 @@ function fireTowers(s: SimState, _rng: Rng): void {
 }
 
 function moveProjectiles(s: SimState): void {
+  const path = pathOf(s)
   const alive: typeof s.projectiles = []
   for (const pr of s.projectiles) {
     pr.x += pr.vx * DT
@@ -323,7 +334,7 @@ function moveProjectiles(s: SimState): void {
     let consumed = false
     for (const k of s.kernels) {
       if (k.hp <= 0) continue
-      const p = kernelPos(k)
+      const p = kernelPos(path, k)
       if (dist(pr.x, pr.y, p.x, p.y) <= KERNELS[k.type].radius + HIT_RADIUS) {
         k.hp -= pr.dmg
         consumed = true // pierce 1
@@ -338,6 +349,7 @@ function moveProjectiles(s: SimState): void {
 }
 
 function resolveDeaths(s: SimState): void {
+  const path = pathOf(s)
   const survivors: Kernel[] = []
   const children: Kernel[] = []
   for (const k of s.kernels) {
@@ -346,9 +358,9 @@ function resolveDeaths(s: SimState): void {
       continue
     }
     const kt = KERNELS[k.type]
-    s.butter += kt.bounty
+    const p = kernelPos(path, k)
+    s.butter += kt.bounty + boostForPop(s, p) // Butter Boost aura tips extra per pop
     s.popped++
-    const p = kernelPos(k)
     s.events.push({ t: 'pop', x: p.x, y: p.y, kind: k.type, boss: kt.boss })
     if (kt.children) {
       for (let i = 0; i < kt.children.count; i++) {
@@ -361,12 +373,32 @@ function resolveDeaths(s: SimState): void {
   s.kernels = survivors.concat(children)
 }
 
+/** Butter Boost: extra butter for a pop at p, summed over every churn whose
+ * aura (boostRadius) covers the pop point. Higher tiers pay more per pop. */
+function boostForPop(s: SimState, p: { x: number; y: number }): number {
+  let extra = 0
+  for (const t of s.towers) {
+    const def = TOWERS[t.type]
+    if (def.kind !== 'econ') continue
+    const radius = tierValue(def, t.pathLevels, 'boostRadius')
+    if (radius > 0 && dist(t.x, t.y, p.x, p.y) <= radius) {
+      extra += tierValue(def, t.pathLevels, 'boostPerPop')
+    }
+  }
+  return extra
+}
+
 function checkRoundEnd(s: SimState): void {
   if (!s.roundActive) return
   if (s.spawnQueue.length === 0 && s.kernels.length === 0) {
     const def = getRound(s.round, s.seed)
-    // round-clear bonus + churn income
-    let income = def.bonus
+    // Butter Bank interest is paid on the butter you're HOLDING as the round
+    // clears (rewards saving up), before the round bonus + flat churn income.
+    let bankRate = 0
+    for (const t of s.towers) bankRate += tierValue(TOWERS[t.type], t.pathLevels, 'interest')
+    const interest = Math.floor(s.butter * Math.min(bankRate, MAX_INTEREST_RATE))
+    // round-clear bonus + flat churn income
+    let income = def.bonus + interest
     for (const t of s.towers) income += towerIncome(TOWERS[t.type], t.pathLevels)
     s.butter += income
     s.projectiles = []
@@ -384,14 +416,15 @@ function checkRoundEnd(s: SimState): void {
 
 // ── Convenience for the client / oracle ──────────────────────────────────────
 
-export function kernelWorld(k: Kernel): { x: number; y: number } {
-  return kernelPos(k)
+export function kernelWorld(s: SimState, k: Kernel): { x: number; y: number } {
+  return kernelPos(pathOf(s), k)
 }
 
 /** Travel heading (radians) at a kernel's position — for facing sprites. */
-export function kernelHeading(k: Kernel): number {
-  const a = pointAt(PATH, k.dist)
-  const b = pointAt(PATH, Math.min(PATH.total, k.dist + 4))
+export function kernelHeading(s: SimState, k: Kernel): number {
+  const path = pathOf(s)
+  const a = pointAt(path, k.dist)
+  const b = pointAt(path, Math.min(path.total, k.dist + 4))
   return Math.atan2(b.y - a.y, b.x - a.x)
 }
 
