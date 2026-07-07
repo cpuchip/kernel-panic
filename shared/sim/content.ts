@@ -2,6 +2,7 @@
 // churn, three kernel varieties + one cob boss, ~15 rounds. All DATA: adding a
 // tower/kernel/round is authoring, not engine work.
 
+import { mulberry32 } from '../rng.ts'
 import type { KernelType, KernelTypeId, RoundDef, TowerType } from './types.ts'
 
 // The map is now data in maps.ts (Michael's son drew four; the classic kitchen
@@ -206,32 +207,72 @@ function normalRound(r: number, seed: number): RoundDef {
   return { groups, bonus: roundBonus(r) }
 }
 
-function bossRound(boss: KernelTypeId, r: number, seed: number): RoundDef {
-  // the boss + a modest escort (a third of the normal round, delayed behind it)
-  const escort = normalRound(r, seed).groups.slice(0, 2)
-    .map((grp) => ({ ...grp, count: Math.max(1, Math.floor(grp.count / 3)), delay: (grp.delay ?? 0) + 120 }))
-  return { groups: [g(boss, 1, 0, 0), ...escort], bonus: roundBonus(r) + 300 }
+function bossRound(boss: KernelTypeId, r: number): RoundDef {
+  // JUST the boss — no escort kernels (his call). It's a pure duel with the one
+  // mob; it breaks into its own children when popped, and that's the whole round.
+  return { groups: [g(boss, 1, 0, 0)], bonus: roundBonus(r) + 300 }
 }
 
 /** The round for a 0-based index. Rounds 1-100 are the campaign; 101+ is Free Play. */
 export function getRound(index: number, seed: number): RoundDef {
   const r = index + 1
-  if (r === 40) return bossRound('cob', r, seed)
-  if (r === 60) return bossRound('bunch', r, seed)
-  if (r === 80) return bossRound('ton', r, seed)
+  if (r === 40) return bossRound('cob', r)
+  if (r === 60) return bossRound('bunch', r)
+  if (r === 80) return bossRound('ton', r)
   if (r === 100) return { groups: [g('bigcorn', 1, 0, 0)], bonus: roundBonus(r) + 2000 }
   if (r <= CAMPAIGN_ROUNDS) return normalRound(r, seed)
-  // Free Play (101+): keep escalating past the campaign
+  return freePlayRound(r, seed)
+}
+
+/** Free Play (round 101+) — PURELY RANDOM and cob-heavy (his call): fewer small
+ * kernels and more/bigger cobs the deeper you go, trending to nearly all
+ * cob-family mobs. Still deterministic in (seed, round). */
+function freePlayRound(r: number, seed: number): RoundDef {
   const over = r - CAMPAIGN_ROUNDS
-  const rr = rng01(seed, r)
-  return {
-    groups: [
-      g('ton', 1 + Math.floor(over / 3), Math.max(40, 200 - over * 6)),
-      g('bunch', 3 + over, Math.max(50, 120 - over * 3), 120),
-      g('bcob', 1 + Math.floor(over / 4), 0, 400 + Math.floor(rr * 80)),
-    ],
-    bonus: roundBonus(CAMPAIGN_ROUNDS) + over * 200,
+  const rand = mulberry32((seed ^ Math.imul(r + 1, 2654435761)) >>> 0)
+  const budget = Math.round(threatBudget(CAMPAIGN_ROUNDS) * (1 + over * 0.15))
+  const groups: ReturnType<typeof g>[] = []
+  let b = budget
+  let delay = 0
+  // a SHRINKING sprinkle of small mobs — gone by ~round 113, then it's pure cobs
+  const smallFrac = Math.max(0, 0.35 - over * 0.028)
+  if (smallFrac > 0) {
+    let sb = b * smallFrac
+    const pool: KernelTypeId[] = ['superhard', 'rainbow', 'kettle', 'candy', 'black', 'white', 'purple']
+    let guardS = 40
+    while (sb > 20 && guardS-- > 0) {
+      const t = pool[Math.floor(rand() * pool.length)]
+      const cost = THREAT[t] ?? 6
+      const count = 1 + Math.floor(rand() * Math.min(24, sb / cost))
+      groups.push(g(t, count, Math.max(6, Math.round(240 / Math.max(4, count))), delay))
+      sb -= count * cost
+      delay += 30
+    }
+    b -= budget * smallFrac
   }
+  // the bulk: random cob-family, weighted toward BIGGER cobs as over grows
+  const cobPool: [KernelTypeId, number][] = [
+    ['cob', Math.max(1, 12 - over * 0.3)],
+    ['quickcob', Math.max(1, 9 - over * 0.2)],
+    ['bunch', 2 + over * 0.35],
+    ['ton', 1 + over * 0.45],
+  ]
+  const totalW = cobPool.reduce((n, [, w]) => n + w, 0)
+  let guardC = 300
+  while (b > (THREAT.cob ?? 320) && guardC-- > 0) {
+    let pick = rand() * totalW
+    let type: KernelTypeId = 'cob'
+    for (const [t, w] of cobPool) { if ((pick -= w) <= 0) { type = t; break } }
+    const cost = THREAT[type] ?? 320
+    if (cost > b) type = 'cob' // can't afford the big one; a cob always fits
+    groups.push(g(type, 1, 90, delay))
+    b -= THREAT[type] ?? 320
+    delay += 40
+  }
+  // an occasional Big Corn of Doom deep in Free Play
+  if (over > 12 && rand() < 0.2) groups.push(g('bigcorn', 1, 0, delay + 200))
+  if (groups.length === 0) groups.push(g('cob', 1, 0, 0)) // safety net
+  return { groups, bonus: roundBonus(CAMPAIGN_ROUNDS) + over * 220 }
 }
 
 /** Effective dph/sps/income given the tiers bought across all paths (each stat

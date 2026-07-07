@@ -280,11 +280,15 @@ console.log('round generator')
   const a = getRound(50, 1234)
   const b = getRound(50, 1234)
   ok(JSON.stringify(a) === JSON.stringify(b), 'getRound is deterministic for a seed+round')
-  // boss rounds pinned (0-based index → round = index+1)
-  ok(getRound(39, 1).groups.some((g) => g.type === 'cob'), 'Corn Cob boss pinned at round 40')
-  ok(getRound(59, 1).groups.some((g) => g.type === 'bunch'), 'Corn Bunch boss pinned at round 60')
-  ok(getRound(79, 1).groups.some((g) => g.type === 'ton'), 'Corn Ton boss pinned at round 80')
-  ok(getRound(99, 1).groups.some((g) => g.type === 'bigcorn'), 'Big Corn of Doom pinned at round 100')
+  // boss rounds pinned — and JUST the boss, no escort (his call, like round 100)
+  const bossOnly = (idx: number, type: string) => {
+    const gr = getRound(idx, 1).groups
+    return gr.length === 1 && gr[0].type === type && gr[0].count === 1
+  }
+  ok(bossOnly(39, 'cob'), 'round 40 is ONLY the Corn Cob boss')
+  ok(bossOnly(59, 'bunch'), 'round 60 is ONLY the Corn Bunch boss')
+  ok(bossOnly(79, 'ton'), 'round 80 is ONLY the Corn Ton boss')
+  ok(bossOnly(99, 'bigcorn'), 'round 100 is ONLY Big Corn of Doom')
   // every round has content, and mob types only appear after they unlock
   for (let r = 1; r <= CAMPAIGN_ROUNDS; r++) {
     const def = getRound(r - 1, 7)
@@ -295,8 +299,19 @@ console.log('round generator')
   // threat climbs: total leak-if-all-through is much bigger at 90 than at 10
   const rbe = (idx: number) => getRound(idx, 7).groups.reduce((n, g) => n + g.count * KERNELS[g.type].leak, 0)
   ok(rbe(89) > rbe(9) * 20, 'the round threat climbs steeply across the campaign')
-  // free play keeps going past 100
+  // free play keeps going past 100, and trends to nearly-all-cob (his call)
   ok(getRound(120, 7).groups.length > 0, 'Free Play generates rounds past 100')
+  const cobFam = new Set(['cob', 'quickcob', 'bunch', 'ton', 'bigcorn'])
+  const deep = getRound(129, 7) // round 130, deep Free Play
+  ok(deep.groups.every((g) => cobFam.has(g.type)), 'deep Free Play is purely cob-family (no small kernels)')
+  const earlyFP = getRound(102, 7) // round 103, early Free Play still has some variety
+  ok(earlyFP.groups.some((g) => !cobFam.has(g.type)), 'early Free Play still sprinkles small mobs')
+  // purely RANDOM: consecutive Free Play rounds differ, but each is deterministic
+  ok(JSON.stringify(getRound(110, 7)) !== JSON.stringify(getRound(111, 7)), 'Free Play rounds are randomly different')
+  ok(JSON.stringify(getRound(110, 7)) === JSON.stringify(getRound(110, 7)), 'each Free Play round is deterministic')
+  // and it gets cob-HEAVIER deeper in (more cob-family mobs at 140 than at 105)
+  const cobCount = (idx: number) => getRound(idx, 7).groups.filter((g) => cobFam.has(g.type)).reduce((n, g) => n + g.count, 0)
+  ok(cobCount(139) > cobCount(104), 'Free Play piles on more cobs the deeper you go')
 }
 
 // ── 8c. Leak = instant game over (a big cob through the bowl ends the run) ────
