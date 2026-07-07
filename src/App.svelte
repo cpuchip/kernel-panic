@@ -61,7 +61,7 @@
     {#if sel}
       <div class="sel">
         <div class="sel-head">
-          <b>{sel.def.name}</b>{#if sel.level > 0}<span class="badge">{'★'.repeat(sel.level)}</span>{/if}
+          <b>{sel.def.name}</b>{#if sel.tiers > 0}<span class="badge">{'★'.repeat(Math.min(sel.tiers, 6))}</span>{/if}
           <button class="x" onclick={deselect} aria-label="close">×</button>
         </div>
         {#if sel.def.kind !== 'econ'}
@@ -71,16 +71,24 @@
             {/each}
           </div>
         {/if}
-        <div class="sel-actions">
-          {#if sel.nextTier}
-            <button class="up" disabled={!sel.canUpgrade} onclick={upgradeSelected}>
-              {sel.nextTier.name} · 🧈{sel.nextTier.cost}
-            </button>
-          {:else}
-            <span class="maxed">★ maxed</span>
-          {/if}
-          <button class="sell" onclick={sellSelected}>Sell 🧈{sel.sellValue}</button>
+        <div class="paths">
+          {#each sel.paths as p (p.index)}
+            <div class="path-row">
+              <span class="path-label">
+                {p.label}
+                <span class="pips">{#each Array(p.maxLevel) as _, i (i)}<span class="pip" class:filled={i < p.level}></span>{/each}</span>
+              </span>
+              {#if p.nextTier}
+                <button class="up" class:locked={p.locked} disabled={!p.canUpgrade} onclick={() => upgradeSelected(p.index)}>
+                  {p.nextTier.name} · 🧈{p.nextTier.cost}
+                </button>
+              {:else}
+                <span class="pathmax">maxed</span>
+              {/if}
+            </div>
+          {/each}
         </div>
+        <button class="sell" onclick={sellSelected}>Sell 🧈{sel.sellValue}</button>
       </div>
     {/if}
   </div>
@@ -203,11 +211,22 @@
   .sel-head { display: flex; gap: 8px; align-items: center; }
   .badge { font-size: 11px; color: #ffd166; }
   .x { margin-left: auto; padding: 1px 8px; font-size: 15px; line-height: 1; }
-  .targets, .sel-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+  .targets { display: flex; gap: 5px; flex-wrap: wrap; }
   .targets button { padding: 3px 8px; font-size: 12px; }
   .targets button.on { border-color: var(--pop); color: var(--pop); }
+
+  .paths { display: flex; flex-direction: column; gap: 4px; }
+  .path-row { display: flex; align-items: center; gap: 8px; }
+  .path-label { font-size: 11px; color: var(--dim); min-width: 66px; display: flex; flex-direction: column; gap: 2px; }
+  .pips { display: flex; gap: 2px; }
+  .pip { width: 8px; height: 4px; border-radius: 2px; background: var(--line); }
+  .pip.filled { background: var(--pop); }
+  .up { flex: 1; text-align: left; font-size: 12px; padding: 5px 8px; }
   .up:disabled { opacity: 0.4; }
-  .sell { color: #f2d16b; }
+  .up.locked { opacity: 0.3; }
+  .pathmax { flex: 1; font-size: 12px; color: #ffd166; padding: 5px 8px; }
+
+  .sell { color: #f2d16b; align-self: flex-start; }
 
   /* ── controls: palette scrolls, Start Round always full and visible ───── */
   .controls {

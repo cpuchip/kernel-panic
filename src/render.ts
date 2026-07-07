@@ -2,7 +2,7 @@
 // Phase 0 is shapes (art comes in Phase 1 via the asset harness). Kernels =
 // kernels, cobs = bosses, towers by kind, plus transient FX from sim events.
 
-import { KERNELS, PATH, TOWERS, stat } from '../shared/sim/content.ts'
+import { KERNELS, PATH, TOWERS, effRange } from '../shared/sim/content.ts'
 import { kernelHeading, kernelWorld, tileBuildable, tileCenter } from '../shared/sim/sim.ts'
 import { TILE, WORLD_H, WORLD_W, type SimState, type Tower } from '../shared/sim/types.ts'
 
@@ -128,7 +128,7 @@ function towerBody(ctx: CanvasRenderingContext2D, t: Tower): void {
   const img = sprite(t.type)
   if (img) {
     drawSpriteFit(ctx, img, 32)
-    if (t.level >= 1) {
+    if (t.pathLevels.some((l) => l > 0)) {
       ctx.fillStyle = '#ffd166'
       ctx.font = '12px system-ui'
       ctx.textAlign = 'center'
@@ -161,7 +161,7 @@ function towerBody(ctx: CanvasRenderingContext2D, t: Tower): void {
       ctx.strokeStyle = 'rgba(120,90,40,0.7)'; ctx.beginPath(); ctx.moveTo(-R + 2, -3); ctx.lineTo(R - 2, -3); ctx.moveTo(-R + 2, 4); ctx.lineTo(R - 2, 4); ctx.stroke()
       break
   }
-  if (t.level >= 1) {
+  if (t.pathLevels.some((l) => l > 0)) {
     ctx.fillStyle = '#ffd166'
     ctx.beginPath(); ctx.arc(R - 2, -R + 2, 3.5, 0, Math.PI * 2); ctx.fill()
   }
@@ -172,7 +172,7 @@ function drawTowers(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   for (const t of s.towers) {
     const def = TOWERS[t.type]
     if ((v.selectedId === t.id) && def.kind !== 'econ') {
-      const range = stat(def, t.level, 'range') as number
+      const range = effRange(def, t.pathLevels)
       ctx.fillStyle = 'rgba(255,209,102,0.08)'
       ctx.strokeStyle = 'rgba(255,209,102,0.4)'
       ctx.lineWidth = 1.5
@@ -269,7 +269,7 @@ function placeGhost(ctx: CanvasRenderingContext2D, v: View): void {
   const tile = v.hoverTile!
   const c = tileCenter(tile.cx, tile.cy)
   const def = TOWERS[v.placingType!]
-  const range = stat(def, 0, 'range') as number
+  const range = effRange(def, def.paths.map(() => 0))
   const okColor = v.canPlace ? 'rgba(120,220,120,' : 'rgba(240,110,110,'
   if (def.kind !== 'econ') {
     ctx.fillStyle = okColor + '0.08)'

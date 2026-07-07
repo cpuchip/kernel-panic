@@ -20,6 +20,12 @@ export const START_BUTTER = 500 // the new roster needs a bigger opening defense
 // the whole game faster/slower without touching the roster.
 export const SPEED_SCALE = 0.45
 
+// From this round on, difficulty compounds +2%/round: ALL mobs get faster, and
+// the cob family (cob/bunch/ton) also gains HP. round 20 = ×1.02, round 21 =
+// ×1.0404, … (design by Michael's son, 2026-07-06).
+export const DIFFICULTY_SCALE_START = 20
+export const DIFFICULTY_SCALE_PER_ROUND = 0.02
+
 // ── Content (data) ───────────────────────────────────────────────────────────
 
 // The enemy roster (design by Michael's son, 2026-07-06 — docs/enemy-design.md).
@@ -56,11 +62,25 @@ export interface KernelType {
 export type TowerKind = 'dart' | 'pulse' | 'beam' | 'econ'
 export type TargetPolicy = 'first' | 'last' | 'strong' | 'close'
 
-/** One purchasable upgrade tier. Later tiers override earlier stats. */
+// Crosspath upgrade trees (design by Michael's son): each attacking tower has
+// three paths — damage / fire-rate / range — and you may invest in at most
+// `maxPaths` of them (2). A tier sets the ABSOLUTE new value for its stat; range
+// tiers give a multiplier on the base range. Butter Churn has one deep path.
+export type PathKey = 'dmg' | 'rate' | 'range' | 'butter'
+
 export interface TowerTier {
   name: string
   cost: number
-  patch: Partial<Pick<TowerType, 'range' | 'cooldown' | 'damage' | 'income' | 'beamWidth'>>
+  dph?: number // damage per hit
+  sps?: number // shots per second
+  rangeMul?: number // × base range
+  income?: number // butter per round (econ)
+}
+
+export interface TowerPath {
+  key: PathKey
+  label: string
+  tiers: TowerTier[]
 }
 
 export interface TowerType {
@@ -68,15 +88,17 @@ export interface TowerType {
   name: string
   kind: TowerKind
   cost: number
-  range: number
-  cooldown: number // seconds between shots
-  damage: number
+  dph: number // base damage per hit
+  sps: number // base shots per second (cooldown = 1/sps)
+  pierce: number // mobs hit per shot (999 = "all in the line/ring")
+  range: number // base range (world units)
+  income?: number // econ base butter per round
   color: string
   projSpeed?: number // dart
   beamWidth?: number // beam
-  income?: number // econ: butter per round clear
   blurb: string
-  upgrades: TowerTier[] // 0 = base; buy tier 1, then tier 2, …
+  maxPaths: number // how many of the paths you may invest in
+  paths: TowerPath[]
 }
 
 export interface SpawnGroup {
@@ -109,7 +131,7 @@ export interface Tower {
   cy: number
   cd: number // current cooldown remaining (seconds)
   target: TargetPolicy
-  level: number // 0 base, 1 upgraded
+  pathLevels: number[] // tier bought per path (parallel to TowerType.paths)
 }
 
 export interface Projectile {
@@ -158,7 +180,7 @@ export interface SimState {
 
 export type Command =
   | { t: 'place'; tower: string; cx: number; cy: number }
-  | { t: 'upgrade'; id: number }
+  | { t: 'upgrade'; id: number; path: number }
   | { t: 'sell'; id: number }
   | { t: 'target'; id: number; policy: TargetPolicy }
   | { t: 'startRound' }

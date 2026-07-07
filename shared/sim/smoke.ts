@@ -8,9 +8,9 @@
 // MP correctness check).
 
 import { mulberry32, type Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, getRound } from './content.ts'
+import { KERNELS, PATH, ROUNDS, TOWERS, effRange, effStat, getRound } from './content.ts'
 import { pointAt, distToPath } from './path.ts'
-import { apply, earlyBonus, newGame, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
+import { apply, earlyBonus, newGame, roundHpMul, roundSpeedMul, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
 import { EARLY_WINDOW_TICKS, START_LIVES, WORLD_H, WORLD_W, TILE, type Command, type SimState } from './types.ts'
 
 let passed = 0
@@ -166,7 +166,7 @@ console.log('replay identity')
     while (s.phase !== 'lost' && guard-- > 0) {
       if (s.phase === 'build') {
         if (!toggled) {
-          apply(s, { t: 'upgrade', id: 1 }, rng)
+          apply(s, { t: 'upgrade', id: 1, path: 0 }, rng)
           apply(s, { t: 'target', id: 2, policy: 'strong' }, rng)
           toggled = true
         }
@@ -242,11 +242,14 @@ console.log('winnable + endless')
         apply(s, { t: 'place', tower: tw, cx, cy }, rng)
       }
     }
-    // upgrade toward max tier when we can comfortably afford the next tier
+    // upgrade: pour into up to 2 paths (damage then fire-rate) when affordable
     for (const t of s.towers) {
       const def = TOWERS[t.type]
-      if (t.level < def.upgrades.length && s.butter >= def.upgrades[t.level].cost + 250) {
-        apply(s, { t: 'upgrade', id: t.id }, rng)
+      for (let p = 0; p < Math.min(def.maxPaths, def.paths.length); p++) {
+        const lvl = t.pathLevels[p]
+        if (lvl < def.paths[p].tiers.length && s.butter >= def.paths[p].tiers[lvl].cost + 400) {
+          apply(s, { t: 'upgrade', id: t.id, path: p }, rng)
+        }
       }
     }
   }
@@ -357,6 +360,49 @@ console.log('bonus mobs')
   const before = s.lives
   tick(s, rng) // it reaches the bowl this tick
   ok(s.lives === before, 'a buttery mob reaching the bowl costs 0 lives')
+}
+
+// ── 8g. Crosspath: at most 2 paths per tower; upgrades change stats ─────────
+console.log('crosspath')
+{
+  const s = newGame()
+  s.butter = 100000
+  const rng = mulberry32(1)
+  apply(s, { t: 'place', tower: 'laser', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
+  const id = s.towers[0].id
+  const def = TOWERS.laser
+  // base dph 5; buy Damage path tier 1 (Focus Lens → dph 10)
+  apply(s, { t: 'upgrade', id, path: 0 }, rng)
+  ok(effStat(def, s.towers[0].pathLevels, 'dph') === 10, 'damage path raises dph 5 → 10')
+  // open a 2nd path (fire-rate) — allowed
+  apply(s, { t: 'upgrade', id, path: 1 }, rng)
+  ok(effStat(def, s.towers[0].pathLevels, 'sps') === 1, 'fire-rate path raises sps 0.5 → 1')
+  ok(s.towers[0].pathLevels.filter((l) => l > 0).length === 2, 'two paths active')
+  // opening a 3rd path is blocked (maxPaths 2)
+  throws(() => apply(s, { t: 'upgrade', id, path: 2 }, rng), 'cannot open a 3rd upgrade path')
+  // but deepening an already-open path is fine
+  apply(s, { t: 'upgrade', id, path: 0 }, rng)
+  ok(effStat(def, s.towers[0].pathLevels, 'dph') === 15, 'Death Ray → dph 15')
+  // range multiplier
+  const baseRange = effRange(def, [0, 0, 0])
+  apply(s, { t: 'place', tower: 'fire', cx: NEAR[4][0], cy: NEAR[4][1] }, rng)
+  const fid = s.towers[1].id
+  apply(s, { t: 'upgrade', id: fid, path: 2 }, rng) // High-Power Launcher ×1.25
+  ok(Math.abs(effRange(TOWERS.fire, s.towers[1].pathLevels) - TOWERS.fire.range * 1.25) < 1e-9, 'range path multiplies base ×1.25')
+  void baseRange
+}
+
+// ── 8h. Endless difficulty scaling (round 20+, +2%/round compounding) ───────
+console.log('difficulty scaling')
+{
+  ok(roundSpeedMul(19) === 1, 'no speed scaling before round 20')
+  ok(Math.abs(roundSpeedMul(20) - 1.02) < 1e-9, 'speed ×1.02 at round 20')
+  ok(Math.abs(roundSpeedMul(21) - 1.0404) < 1e-9, 'speed ×1.0404 at round 21 (compounds)')
+  ok(Math.abs(roundHpMul(20, 'cob') - 1.02) < 1e-9, 'cob HP ×1.02 at round 20')
+  ok(roundHpMul(25, 'ton') > 1, 'corn ton HP scales')
+  ok(roundHpMul(30, 'poppable') === 1, 'basic kernels get NO HP scaling')
+  ok(roundHpMul(30, 'bkernel') === 1, 'buttery mobs get NO HP scaling')
+  ok(roundSpeedMul(19) === 1 && roundSpeedMul(50) > 1.8, 'speed keeps compounding deep into endless')
 }
 
 // ── 9. Kernels sit on the path ──────────────────────────────────────────────

@@ -35,10 +35,21 @@ The record of the drive. Newest state at the top.
 - **Phase 1c — new enemy roster + tower tiers** ✅ **DONE 2026-07-06** (design by Michael's
   son, `docs/enemy-design.md`): the **10-mob roster** — main pop-chain (Corn Ton →4 Bunch
   →4 Cob →4 Hard →1 Kernel →1 Poppable) + bonus mobs (Shiney →1 Kernel; the leak-0 Buttery
-  trio worth 1k/2.5k/10k butter). **Corn Bunch resists laser.** Each tower gained a **2nd
+  trio worth 1k/2.5k/10k butter). **Shiney Kernel resists laser.** Each tower gained a **2nd
   upgrade tier** with damage scaled to the ~1000-HP Corn Ton chain. `SPEED_SCALE=0.45` maps
   the sheet's relative speeds onto the board; economy retuned (start 500, bonuses up) so
   it's winnable. Oracle 37. NEXT: distinct art per new mob; more play-tuning.
+- **Phase 1d — crosspath upgrade trees + endless difficulty scaling** ✅ **DONE 2026-07-06**
+  (design by Michael's son, `docs/tower-design.md`): the full **Bloons crosspath** system —
+  each attacking tower has **3 paths** (Damage / Fire-rate / Range), 2 tiers each, and you may
+  invest in **at most 2** (`maxPaths`). Tiers **replace** the stat (future *powers* like camo
+  sight will stack — model built for it); range tiers multiply base range; Butter Churn keeps
+  its one deep 4-tier path. Tower panel now shows three upgrade tracks with pips; the locked
+  3rd path dims. **Round-20+ scaling:** all kernels' speed compounds +2%/round (`1.02^(r−19)`),
+  and the **cob family only** (Cob/Bunch/Ton) also gains HP the same way — basic and buttery
+  mobs get no HP scaling. Oracle 37→51 (crosspath gate, stat/range math, every scaling case);
+  browser-verified (place → open 2 paths → 3rd locks). NEXT: distinct art per new mob;
+  play-tuning; churn 2nd-path ideas (Butter Bank / Butter Boost aura).
 - **Phase 1 — juice + content**: pop FX/SFX (asset-harness), upgrade trees, more
   kernels (camo+detect, kettle), more maps/rounds, endless. ui-craft polish.
 - **Phase 2 — co-op MP**: server-authoritative command relay, shared kitchen, tables.

@@ -4,9 +4,11 @@
 
 import { dist, pointSegDist } from '../vec.ts'
 import type { Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, getRound, stat, towerIncome, towerSpent } from './content.ts'
+import { KERNELS, PATH, ROUNDS, TOWERS, activePaths, effRange, effStat, getRound, towerIncome, towerSpent } from './content.ts'
 import { distToPath, pointAt } from './path.ts'
 import {
+  DIFFICULTY_SCALE_PER_ROUND,
+  DIFFICULTY_SCALE_START,
   DT,
   EARLY_BONUS_FRAC,
   EARLY_WINDOW_TICKS,
@@ -31,6 +33,26 @@ function fail(msg: string): never {
 
 const BUILD_CLEARANCE = 22 // world units a tower must sit off the path
 const HIT_RADIUS = 6 // dart collision padding beyond kernel radius
+
+// ── Endless difficulty scaling (round 20+, compounding +2%/round) ────────────
+const cobFamily = (type: KernelTypeId): boolean => type === 'cob' || type === 'bunch' || type === 'ton'
+
+/** Speed multiplier for a wave — ALL mobs get faster from round 20 on. */
+export function roundSpeedMul(round1: number): number {
+  if (round1 < DIFFICULTY_SCALE_START) return 1
+  return Math.pow(1 + DIFFICULTY_SCALE_PER_ROUND, round1 - (DIFFICULTY_SCALE_START - 1))
+}
+
+/** HP multiplier — only the cob family (cob/bunch/ton) gains HP from round 20 on. */
+export function roundHpMul(round1: number, type: KernelTypeId): number {
+  if (!cobFamily(type) || round1 < DIFFICULTY_SCALE_START) return 1
+  return Math.pow(1 + DIFFICULTY_SCALE_PER_ROUND, round1 - (DIFFICULTY_SCALE_START - 1))
+}
+
+/** The 1-based number of the wave currently in progress (or next to start). */
+function activeRound(s: SimState): number {
+  return s.round + 1
+}
 
 export function newGame(seed = 1): SimState {
   return {
@@ -89,25 +111,30 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
       if (s.butter < def.cost) fail('not enough butter')
       s.butter -= def.cost
       const { x, y } = tileCenter(cmd.cx, cmd.cy)
-      s.towers.push({ id: s.nextId++, type: def.id, x, y, cx: cmd.cx, cy: cmd.cy, cd: 0, target: 'first', level: 0 })
+      s.towers.push({ id: s.nextId++, type: def.id, x, y, cx: cmd.cx, cy: cmd.cy, cd: 0, target: 'first', pathLevels: def.paths.map(() => 0) })
       return
     }
     case 'upgrade': {
       const t = s.towers.find((w) => w.id === cmd.id)
       if (!t) fail('no such tower')
       const def = TOWERS[t.type]
-      if (t.level >= def.upgrades.length) fail('fully upgraded')
-      const cost = def.upgrades[t.level].cost
+      const p = cmd.path
+      if (p < 0 || p >= def.paths.length) fail('no such path')
+      const lvl = t.pathLevels[p]
+      if (lvl >= def.paths[p].tiers.length) fail('path fully upgraded')
+      // crosspath gate: opening a NEW path can't exceed maxPaths
+      if (lvl === 0 && activePaths(t.pathLevels) >= def.maxPaths) fail(`only ${def.maxPaths} upgrade paths per tower`)
+      const cost = def.paths[p].tiers[lvl].cost
       if (s.butter < cost) fail('not enough butter')
       s.butter -= cost
-      t.level++
+      t.pathLevels[p]++
       return
     }
     case 'sell': {
       const i = s.towers.findIndex((w) => w.id === cmd.id)
       if (i < 0) fail('no such tower')
       const t = s.towers[i]
-      s.butter += Math.floor(towerSpent(TOWERS[t.type], t.level) * 0.7) // 70% refund
+      s.butter += Math.floor(towerSpent(TOWERS[t.type], t.pathLevels) * 0.7) // 70% refund
       s.towers.splice(i, 1)
       return
     }
@@ -160,19 +187,25 @@ export function tick(s: SimState, rng: Rng): void {
   checkRoundEnd(s)
 }
 
+/** Spawn a mob, applying the round's HP scaling (cob family only, round 20+). */
+function makeKernel(s: SimState, type: KernelTypeId, dist: number): Kernel {
+  return { id: s.nextId++, type, dist, hp: KERNELS[type].hp * roundHpMul(activeRound(s), type) }
+}
+
 function spawn(s: SimState): void {
   // spawnQueue is sorted by atTick; pull everything due this tick.
   while (s.spawnQueue.length && s.spawnQueue[0].atTick <= s.tick) {
     const item = s.spawnQueue.shift()!
-    s.kernels.push({ id: s.nextId++, type: item.type, dist: 0, hp: KERNELS[item.type].hp })
+    s.kernels.push(makeKernel(s, item.type, 0))
   }
 }
 
 function advanceKernels(s: SimState): void {
   const survivors: Kernel[] = []
+  const speedMul = SPEED_SCALE * roundSpeedMul(activeRound(s))
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
-    k.dist += kt.speed * SPEED_SCALE * DT
+    k.dist += kt.speed * speedMul * DT
     if (k.dist >= PATH.total) {
       // leaked into the bowl
       s.lives -= kt.leak
@@ -224,9 +257,10 @@ function fireTowers(s: SimState, _rng: Rng): void {
       t.cd -= DT
       continue
     }
-    const range = stat(def, t.level, 'range') as number
-    const dmg = stat(def, t.level, 'damage') as number
-    const cooldown = stat(def, t.level, 'cooldown') as number
+    const range = effRange(def, t.pathLevels)
+    const dmg = effStat(def, t.pathLevels, 'dph')
+    const sps = effStat(def, t.pathLevels, 'sps')
+    const cooldown = sps > 0 ? 1 / sps : 1
 
     if (def.kind === 'pulse') {
       // AoE ring: fire only when a kernel is in range, then damage all in range.
@@ -261,7 +295,7 @@ function fireTowers(s: SimState, _rng: Rng): void {
       s.events.push({ t: 'fire', x: t.x, y: t.y, tx: tp.x, ty: tp.y, kind: 'fire' })
     } else if (def.kind === 'beam') {
       // Piercing line from tower through the target: hit all kernels near the ray.
-      const width = (stat(def, t.level, 'beamWidth') as number) ?? 12
+      const width = def.beamWidth ?? 12
       const dx = tp.x - t.x
       const dy = tp.y - t.y
       const len = Math.sqrt(dx * dx + dy * dy) || 1
@@ -319,7 +353,7 @@ function resolveDeaths(s: SimState): void {
     if (kt.children) {
       for (let i = 0; i < kt.children.count; i++) {
         const cd = Math.max(0, k.dist - i * kt.children.spread)
-        children.push({ id: s.nextId++, type: kt.children.type, dist: cd, hp: KERNELS[kt.children.type].hp })
+        children.push(makeKernel(s, kt.children.type, cd))
       }
     }
   }
@@ -333,7 +367,7 @@ function checkRoundEnd(s: SimState): void {
     const def = getRound(s.round, s.seed)
     // round-clear bonus + churn income
     let income = def.bonus
-    for (const t of s.towers) income += towerIncome(TOWERS[t.type], t.level)
+    for (const t of s.towers) income += towerIncome(TOWERS[t.type], t.pathLevels)
     s.butter += income
     s.projectiles = []
     s.roundActive = false

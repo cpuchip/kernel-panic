@@ -44,31 +44,41 @@ One deep path (it only does one thing — make butter):
 
 ---
 
-## Questions for the artist (before we build it)
+## Answers from Michael's son (2026-07-06) — all confirmed, now BUILT
 
-1. **The "2 paths" rule** — confirm it works like Bloons: each attacking tower has 3 paths
-   (Damage / Fire-rate / Range) and you can buy tiers in **at most 2 of the 3**. So you could
-   go full Damage + full Fire-rate, but then *not* touch Range. Right?
-2. **Do 2 paths combine?** e.g. a Laser with Death Ray (DPH 15) **and** Fastest Fire (SPS 2.0)
-   = 15 damage twice a second. Yes?
-3. **Tiers replace, not add** — Death Ray is DPH **15 total** (not 10 + 15). Right?
-4. **Range = multiplier?** ×1.25 then ×1.50 on the base range (not absolute). Right? (And does
-   a second tier stack, ×1.25 then ×1.50, or is ×1.50 the total?)
-5. **Butter Churner** — one straight 4-tier path (250 → 300 → 500 → 750 → 1000)? And since it
-   has only one path, the "2 paths" rule doesn't apply to it, correct?
-6. **"Launcher" (Fire Tosser range path)** — is that *just* more range, or does "Mega Launcher"
-   also change the shot (lob it / small splash)? The name made me wonder.
-7. **New base numbers** — your tower costs/damage are bigger than the current game (Laser 500
-   vs 320, DPH 5 vs 2, etc.) and match your enemy chart's big bounties. Adopting this chart
-   means moving the **whole game to your number scale** (bigger costs, bigger butter). Good?
-8. **Base SPS** — the engine uses "cooldown" internally; SPS 0.5 = one shot every 2 seconds.
-   Just confirming that's the intent (Laser is a slow, hard-hitting sniper; Fire Tosser at
-   SPS 1 is one shot/second).
+1. **The "2 paths" rule** — yes, Bloons crosspath: 3 paths, buy tiers in **at most 2**. Full
+   Damage + full Fire-rate is allowed, but then Range is locked. ✅ Enforced (`maxPaths: 2`).
+2. **Do 2 paths combine?** Yes — Death Ray (DPH 15) + Fastest Fire (SPS 2.0) = 15 damage twice
+   a second. ✅
+3. **Tiers replace, not add** — Death Ray is DPH **15 total**. ✅ *But note his design intent:*
+   numeric stats (damage / range / sps / bpr) **replace** on upgrade; future **powers** (e.g.
+   camo-detection sight — not built yet) will **stack**. The path model is built so powers can
+   be added as a stacking layer later without touching the replace-semantics of the numbers.
+4. **Range = multiplier** on base range. A second tier is the **total** (×1.50 is the whole
+   thing, not ×1.25 then ×1.50). ✅ (`effRange` takes the highest `rangeMul`.)
+5. **Butter Churner** — one straight 4-tier path; the "2 paths" rule doesn't apply. ✅
+   (`maxPaths: 1`, one path.)
+6. **"Launcher" (Fire Tosser range path)** — just range for now; a shot-changing power can come
+   later. ✅
+7. **New base numbers** — yes, adopt his scale; the whole game moved to it (start butter 500,
+   bigger costs + bounties). ✅ (`SPEED_SCALE = 0.45` maps his relative speeds onto the board.)
+8. **Base SPS** — confirmed. SPS 0.5 = one shot / 2s (slow hard-hitting Laser). ✅ (`cooldown =
+   1 / sps`.)
 
-## How it'd slot into the game
+## Round-20+ difficulty scaling (also his design, same sheet)
 
-The current towers have a single line of 2 upgrades. This is a bigger, better system — the
-proper crosspath tree. Implementing it means: each tower stores a level **per path** (Damage
-0–2 / Rate 0–2 / Range 0–2) with the "at most 2 paths" rule enforced; SPS→cooldown and range
-multipliers wired in; the tower panel shows three little upgrade tracks. All the numbers stay
-data (easy to tune). It's a chunk of work but it's the heart of a good tower-defense game.
+From **round 20 on**, difficulty compounds **+2% per round**:
+- **All kernels get faster** — round 20 = ×1.02, round 21 = ×1.0404, round 22 = ×1.0612 … the
+  multiplier is `1.02^(round − 19)`.
+- **The cob family only** (Corn Cob / Corn Bunch / Corn Ton) **also gains HP**, same formula.
+- Does **NOT** apply HP scaling to basic kernels or the buttery mobs (speed scaling is
+  universal; HP scaling is cob-family-only). ✅ (`roundSpeedMul` / `roundHpMul` in `sim.ts`.)
+
+## Status
+
+**Built and shipped.** Each tower stores a tier **per path** (`pathLevels: number[]`); the
+`upgrade` command carries a `path` index and rejects opening a 3rd path once 2 are active;
+SPS→cooldown and range multipliers are wired; the tower panel shows three upgrade tracks with
+pips and per-path buy buttons (the locked 3rd path dims). All numbers stay data in
+`shared/sim/content.ts` — easy for the artist to tune. Oracle: `smoke.ts` proves the crosspath
+gate, the stat/range math, and every scaling case (51 assertions green).

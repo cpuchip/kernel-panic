@@ -64,73 +64,81 @@ export const KERNELS: Record<KernelTypeId, KernelType> = {
   bcob: { id: 'bcob', name: 'Buttery Corn Cob', hp: 50, speed: 500, bounty: 10000, leak: 0, radius: 16, color: '#ffd54a', cobShape: true },
 }
 
-// ── Towers (heat is the through-line) ────────────────────────────────────────
-
-// Two upgrade tiers each — damage scales to the new HP curve (a Corn Ton is
-// ~1000 effective HP through its whole pop-chain, so late towers hit HARD).
+// ── Towers — the crosspath trees (Michael's son's "Tower Update" sheet) ──────
+// Each attacking tower has 3 paths (damage / fire-rate / range), 2 tiers each;
+// you may invest in at most maxPaths (2) of them. SPS = shots/sec (cooldown =
+// 1/sps), DPH = damage/hit, pierce = mobs hit per shot (999 = all in line/ring),
+// range tiers multiply the base range. Full table + rationale: docs/tower-design.md.
 
 export const TOWERS: Record<string, TowerType> = {
   fire: {
-    id: 'fire',
-    name: 'Fire Tosser',
-    kind: 'dart',
-    cost: 100,
-    range: 96,
-    cooldown: 0.5,
-    damage: 1,
-    color: '#ff7a3c',
-    projSpeed: 320,
-    blurb: 'Throws flame darts at one kernel. Cheap and reliable.',
-    upgrades: [
-      { name: 'Double Roast', cost: 120, patch: { cooldown: 0.34, damage: 3 } },
-      { name: 'Inferno', cost: 300, patch: { cooldown: 0.24, damage: 9, range: 112 } },
+    id: 'fire', name: 'Fire Tosser', kind: 'dart',
+    cost: 200, dph: 1, sps: 1, pierce: 1, range: 96, projSpeed: 320, color: '#ff7a3c', maxPaths: 2,
+    blurb: 'Throws a flame dart at one kernel. Cheap, fast, single-target.',
+    paths: [
+      { key: 'dmg', label: 'Damage', tiers: [
+        { name: 'Hot Shot', cost: 250, dph: 3 },
+        { name: 'Blazing Shot', cost: 750, dph: 5 },
+      ] },
+      { key: 'rate', label: 'Fire Rate', tiers: [
+        { name: 'Quick Load', cost: 250, sps: 2 },
+        { name: 'Triple Shot', cost: 750, sps: 3 },
+      ] },
+      { key: 'range', label: 'Range', tiers: [
+        { name: 'High-Power Launcher', cost: 300, rangeMul: 1.25 },
+        { name: 'Mega Launcher', cost: 800, rangeMul: 1.5 },
+      ] },
     ],
   },
   microwave: {
-    id: 'microwave',
-    name: 'Microwave',
-    kind: 'pulse',
-    cost: 250,
-    range: 74,
-    cooldown: 1.0,
-    damage: 1,
-    color: '#5ad1e8',
+    id: 'microwave', name: 'Microwave', kind: 'pulse',
+    cost: 750, dph: 3, sps: 0.5, pierce: 999, range: 74, color: '#5ad1e8', maxPaths: 2,
     blurb: 'Pulses heat in a ring — hits every kernel around it.',
-    upgrades: [
-      { name: 'Overcharge', cost: 240, patch: { range: 98, damage: 3 } },
-      { name: 'Meltdown', cost: 560, patch: { range: 122, damage: 8, cooldown: 0.8 } },
+    paths: [
+      { key: 'dmg', label: 'Damage', tiers: [
+        { name: 'High-Power Wave', cost: 750, dph: 5 },
+        { name: 'Mega Wave', cost: 1000, dph: 10 },
+      ] },
+      { key: 'rate', label: 'Fire Rate', tiers: [
+        { name: 'Faster Wave', cost: 1000, sps: 1 },
+        { name: 'Super-Fast Wave', cost: 1500, sps: 1.5 },
+      ] },
+      { key: 'range', label: 'Range', tiers: [
+        { name: 'Long Wave', cost: 750, rangeMul: 1.25 },
+        { name: 'Super Long Wave', cost: 1000, rangeMul: 1.5 },
+      ] },
     ],
   },
   laser: {
-    id: 'laser',
-    name: 'Laser',
-    kind: 'beam',
-    cost: 320,
-    range: 240,
-    cooldown: 0.85,
-    damage: 2,
-    color: '#ff4d6d',
-    beamWidth: 12,
-    blurb: 'Piercing beam down a line. Loves straightaways — but Shiney Kernels bounce it off.',
-    upgrades: [
-      { name: 'Focus Lens', cost: 300, patch: { cooldown: 0.6, damage: 5, beamWidth: 16 } },
-      { name: 'Death Ray', cost: 680, patch: { cooldown: 0.45, damage: 12, beamWidth: 20 } },
+    id: 'laser', name: 'Laser', kind: 'beam',
+    cost: 500, dph: 5, sps: 0.5, pierce: 999, range: 240, beamWidth: 14, color: '#ff4d6d', maxPaths: 2,
+    blurb: 'Piercing beam down a line — slow but heavy. Shiney Kernels bounce it off.',
+    paths: [
+      { key: 'dmg', label: 'Damage', tiers: [
+        { name: 'Focus Lens', cost: 500, dph: 10 },
+        { name: 'Death Ray', cost: 1000, dph: 15 },
+      ] },
+      { key: 'rate', label: 'Fire Rate', tiers: [
+        { name: 'Faster Fire', cost: 500, sps: 1 },
+        { name: 'Fastest Fire', cost: 1000, sps: 2 },
+      ] },
+      { key: 'range', label: 'Range', tiers: [
+        { name: 'Mega Range', cost: 500, rangeMul: 1.25 },
+        { name: 'Super Range', cost: 1000, rangeMul: 1.5 },
+      ] },
     ],
   },
   churn: {
-    id: 'churn',
-    name: 'Butter Churn',
-    kind: 'econ',
-    cost: 525,
-    range: 0,
-    cooldown: 0,
-    damage: 0,
-    color: '#f2e2b0',
-    income: 36,
-    blurb: 'No attack. Slowly churns out butter every round you clear.',
-    upgrades: [
-      { name: 'Extra Cream', cost: 500, patch: { income: 82 } },
-      { name: 'Creamery', cost: 900, patch: { income: 175 } },
+    id: 'churn', name: 'Butter Churn', kind: 'econ',
+    cost: 1500, dph: 0, sps: 0, pierce: 0, range: 0, income: 250, color: '#f2e2b0', maxPaths: 1,
+    blurb: 'No attack. Churns out butter every round you clear.',
+    paths: [
+      { key: 'butter', label: 'Butter', tiers: [
+        { name: 'More Butter', cost: 1000, income: 300 },
+        { name: 'Even More Butter', cost: 1250, income: 500 },
+        { name: 'More More More!', cost: 1500, income: 750 },
+        { name: 'All The BUTTER!', cost: 3000, income: 1000 },
+      ] },
     ],
   },
 }
@@ -179,24 +187,44 @@ export function getRound(index: number, seed: number): RoundDef {
   return { groups, bonus: 400 + over * 40 }
 }
 
-/** A tower's effective stat at a level — later tiers override earlier ones. */
-export function stat<K extends keyof TowerType>(t: TowerType, level: number, key: K): TowerType[K] {
-  let v = t[key]
-  for (let i = 0; i < level && i < t.upgrades.length; i++) {
-    const patch = t.upgrades[i].patch as Record<string, unknown>
-    if (key in patch && patch[key as string] !== undefined) v = patch[key as string] as TowerType[K]
-  }
+/** Effective dph/sps/income given the tiers bought across all paths (each stat
+ * lives in one path; a later tier of that path overrides the earlier value). */
+export function effStat(t: TowerType, levels: number[], key: 'dph' | 'sps' | 'income'): number {
+  let v = (t[key] as number | undefined) ?? 0
+  t.paths.forEach((p, i) => {
+    for (let tier = 0; tier < (levels[i] ?? 0); tier++) {
+      const val = p.tiers[tier][key]
+      if (val !== undefined) v = val
+    }
+  })
   return v
 }
 
-/** Butter income of a tower at a given level. */
-export function towerIncome(t: TowerType, level: number): number {
-  return (stat(t, level, 'income') as number | undefined) ?? 0
+/** Effective range = base × the highest range-tier multiplier bought. */
+export function effRange(t: TowerType, levels: number[]): number {
+  let mul = 1
+  t.paths.forEach((p, i) => {
+    for (let tier = 0; tier < (levels[i] ?? 0); tier++) {
+      if (p.tiers[tier].rangeMul !== undefined) mul = p.tiers[tier].rangeMul!
+    }
+  })
+  return t.range * mul
 }
 
-/** Total butter spent on a tower at a level (base + purchased tiers) — for sell refunds. */
-export function towerSpent(t: TowerType, level: number): number {
+export function towerIncome(t: TowerType, levels: number[]): number {
+  return effStat(t, levels, 'income')
+}
+
+/** How many paths have at least one tier bought (the crosspath "pick 2" gate). */
+export function activePaths(levels: number[]): number {
+  return levels.filter((l) => l > 0).length
+}
+
+/** Total butter spent (base + every purchased tier) — for the 70% sell refund. */
+export function towerSpent(t: TowerType, levels: number[]): number {
   let spent = t.cost
-  for (let i = 0; i < level && i < t.upgrades.length; i++) spent += t.upgrades[i].cost
+  t.paths.forEach((p, i) => {
+    for (let tier = 0; tier < (levels[i] ?? 0); tier++) spent += p.tiers[tier].cost
+  })
   return spent
 }

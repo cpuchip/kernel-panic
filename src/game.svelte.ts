@@ -4,7 +4,7 @@
 // chrome around it.
 
 import { mulberry32, type Rng } from '../shared/rng.ts'
-import { ROUNDS, TOWERS, TOWER_ORDER, stat, towerSpent } from '../shared/sim/content.ts'
+import { ROUNDS, TOWERS, TOWER_ORDER, towerSpent } from '../shared/sim/content.ts'
 import { apply, earlyBonus, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
 import { DT, TPS, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
 import { draw, type FxItem } from './render.ts'
@@ -250,21 +250,34 @@ export function selectedTower() {
   const t = sim.towers.find((w) => w.id === ui.selectedId)
   if (!t) return null
   const def = TOWERS[t.type]
-  const nextTier = t.level < def.upgrades.length ? def.upgrades[t.level] : null
+  const active = t.pathLevels.filter((l) => l > 0).length
+  const paths = def.paths.map((p, i) => {
+    const level = t.pathLevels[i]
+    const maxed = level >= p.tiers.length
+    const nextTier = maxed ? null : p.tiers[level]
+    // can't OPEN a new path once maxPaths are active
+    const blockedByCrosspath = level === 0 && active >= def.maxPaths
+    return {
+      index: i,
+      label: p.label,
+      level,
+      maxLevel: p.tiers.length,
+      nextTier, // { name, cost } | null
+      canUpgrade: nextTier !== null && !blockedByCrosspath && sim.butter >= nextTier.cost,
+      locked: blockedByCrosspath,
+    }
+  })
   return {
     tower: t,
     def,
-    range: stat(def, t.level, 'range') as number,
-    level: t.level,
-    maxLevel: def.upgrades.length,
-    nextTier, // { name, cost } | null
-    canUpgrade: nextTier !== null && sim.butter >= nextTier.cost,
-    sellValue: Math.floor(towerSpent(def, t.level) * 0.7),
+    tiers: t.pathLevels.reduce((a, b) => a + b, 0),
+    paths,
+    sellValue: Math.floor(towerSpent(def, t.pathLevels) * 0.7),
   }
 }
 
-export function upgradeSelected(): void {
-  if (ui.selectedId !== null && dispatch({ t: 'upgrade', id: ui.selectedId })) playSfx('place')
+export function upgradeSelected(path: number): void {
+  if (ui.selectedId !== null && dispatch({ t: 'upgrade', id: ui.selectedId, path })) playSfx('place')
 }
 
 export function sellSelected(): void {
