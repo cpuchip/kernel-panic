@@ -4,7 +4,7 @@
 // chrome around it.
 
 import { mulberry32, type Rng } from '../shared/rng.ts'
-import { ROUNDS, TOWERS, TOWER_ORDER, towerSpent } from '../shared/sim/content.ts'
+import { CAMPAIGN_ROUNDS, TOWERS, TOWER_ORDER, towerSpent } from '../shared/sim/content.ts'
 import { DEFAULT_MAP, MAPS, MAP_ORDER, type GameMap } from '../shared/sim/maps.ts'
 import { apply, earlyBonus, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
 import { DT, TPS, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
@@ -13,7 +13,6 @@ import { playSfx } from './sound.svelte.ts'
 import { settings } from './settings.svelte.ts'
 
 const AUTO_DELAY_TICKS = 3 * TPS // grace before auto-start fires (time to place)
-const CAMPAIGN_ROUNDS = ROUNDS.length
 
 export const ui = $state({
   screen: 'menu' as 'menu' | 'playing', // map picker vs. the board

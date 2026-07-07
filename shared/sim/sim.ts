@@ -4,7 +4,7 @@
 
 import { dist, pointSegDist } from '../vec.ts'
 import type { Rng } from '../rng.ts'
-import { KERNELS, ROUNDS, TOWERS, activePaths, effRange, effStat, getRound, tierValue, towerIncome, towerSpent } from './content.ts'
+import { CAMPAIGN_ROUNDS, KERNELS, TOWERS, activePaths, effRange, effStat, getRound, tierValue, towerIncome, towerSpent } from './content.ts'
 import { DEFAULT_MAP, MAPS } from './maps.ts'
 import { distToPath, pointAt, type Path } from './path.ts'
 import {
@@ -363,9 +363,11 @@ function resolveDeaths(s: SimState): void {
     s.popped++
     s.events.push({ t: 'pop', x: p.x, y: p.y, kind: k.type, boss: kt.boss })
     if (kt.children) {
-      for (let i = 0; i < kt.children.count; i++) {
-        const cd = Math.max(0, k.dist - i * kt.children.spread)
-        children.push(makeKernel(s, kt.children.type, cd))
+      for (const grp of kt.children) {
+        for (let i = 0; i < grp.count; i++) {
+          const cd = Math.max(0, k.dist - i * grp.spread)
+          children.push(makeKernel(s, grp.type, cd))
+        }
       }
     }
   }
@@ -408,7 +410,7 @@ function checkRoundEnd(s: SimState): void {
     s.events.push({ t: 'roundClear' })
     // Beating the scripted campaign is a milestone, not an ending — endless
     // continues. Only running out of lives ends a run.
-    if (s.round === ROUNDS.length) s.events.push({ t: 'campaignClear' })
+    if (s.round === CAMPAIGN_ROUNDS) s.events.push({ t: 'campaignClear' })
     s.phase = 'build'
     s.buildStartTick = s.tick
   }

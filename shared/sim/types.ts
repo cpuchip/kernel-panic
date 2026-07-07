@@ -20,25 +20,42 @@ export const START_BUTTER = 500 // the new roster needs a bigger opening defense
 // the whole game faster/slower without touching the roster.
 export const SPEED_SCALE = 0.45
 
-// From this round on, difficulty compounds +2%/round: ALL mobs get faster, and
-// the cob family (cob/bunch/ton) also gains HP. round 20 = ×1.02, round 21 =
-// ×1.0404, … (design by Michael's son, 2026-07-06).
-export const DIFFICULTY_SCALE_START = 20
+// Free Play (past round 100) compounds +2%/round: ALL mobs get faster, and the
+// cob family (cob/bunch/ton) also gains HP. Within the 100-round campaign the
+// procedural generator handles escalation, so scaling only kicks in AFTER it.
+// round 101 = ×1.02, round 102 = ×1.0404, … (design by Michael's son).
+export const DIFFICULTY_SCALE_START = 101
 export const DIFFICULTY_SCALE_PER_ROUND = 0.02
 
 // ── Content (data) ───────────────────────────────────────────────────────────
 
-// The enemy roster (design by Michael's son, 2026-07-06 — docs/enemy-design.md).
-// Main pop-chain: ton → bunch → cob → hard → kernel → poppable → gone.
-// Bonus mobs: shiney (→ kernel), and the buttery trio (leak 0, huge bounty).
+// The enemy roster v2 (design by Michael's son — docs/enemy-design-v2.md), a
+// faithful Bloons-TD port in corn. Ratified 2026-07-07.
+//   Basic chain:  hard → kernel → poppable → gone (each 1 HP)
+//   Rush:         kettle, candy (fast, no split, high leak)
+//   Immunity:     black(bomb) white(freeze) blackwhite(both) purple(laser+freeze)
+//                 melted(laser) rainbow superhard(ceramic) shiney(laser)
+//   Cob bosses:   cob→bunch→ton→bigcorn (MOAB class) + quickcob (fast)
+//   Buttery:      bkernel, bpopcorn, bcob (leak 0, huge bounty)
 export type KernelTypeId =
   | 'poppable'
   | 'kernel'
   | 'hard'
+  | 'kettle'
+  | 'candy'
+  | 'black'
+  | 'white'
+  | 'blackwhite'
+  | 'purple'
+  | 'melted'
+  | 'rainbow'
+  | 'superhard'
+  | 'shiney'
   | 'cob'
+  | 'quickcob'
   | 'bunch'
   | 'ton'
-  | 'shiney'
+  | 'bigcorn'
   | 'bkernel'
   | 'bpopcorn'
   | 'bcob'
@@ -54,9 +71,13 @@ export interface KernelType {
   color: string
   boss?: boolean // triggers the boss-incoming cue + heading rotation
   cobShape?: boolean // rendered as a cob (rotates to heading)
-  resistLaser?: boolean // immune to the laser tower (Shiney Kernel)
-  /** on pop, spawn these (dist-staggered behind the pop point) */
-  children?: { type: KernelTypeId; count: number; spread: number }
+  resistLaser?: boolean // immune to the laser beam (Shiney/Melted/Purple)
+  resistFreeze?: boolean // LATENT until the freeze tower ships (White/Zebra/Purple)
+  resistBomb?: boolean // LATENT until the bomb tower ships (Black/Zebra)
+  /** on pop, spawn these child groups (dist-staggered behind the pop point).
+   * An array so a mob can spawn several TYPES (Zebra → 1 black + 1 white; Big
+   * Corn of Doom → 2 Corn Ton + 3 Quick Cob). */
+  children?: { type: KernelTypeId; count: number; spread: number }[]
 }
 
 export type TowerKind = 'dart' | 'pulse' | 'beam' | 'econ'

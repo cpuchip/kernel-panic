@@ -32,8 +32,9 @@ export interface View {
 const SPRITES: Record<string, HTMLImageElement> = {}
 if (typeof Image !== 'undefined') {
   for (const n of [
-    // 10 mobs (distinct art) + 4 towers
+    // mobs with art (the 9 remaining v2 mobs fall back to drawn shapes) + 4 towers
     'poppable', 'kernel', 'hard', 'cob', 'bunch', 'ton', 'shiney', 'bkernel', 'bpopcorn', 'bcob',
+    'quickcob', 'bigcorn',
     'fire', 'microwave', 'laser', 'churn',
   ]) {
     const img = new Image()

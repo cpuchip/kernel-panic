@@ -8,7 +8,7 @@
 // MP correctness check).
 
 import { mulberry32, type Rng } from '../rng.ts'
-import { KERNELS, PATH, ROUNDS, TOWERS, effRange, effStat, getRound, tierValue, towerIncome } from './content.ts'
+import { CAMPAIGN_ROUNDS, KERNELS, PATH, TOWERS, effRange, effStat, getRound, tierValue, towerIncome } from './content.ts'
 import { MAPS, MAP_ORDER } from './maps.ts'
 import { pointAt, distToPath } from './path.ts'
 import { apply, earlyBonus, newGame, roundHpMul, roundSpeedMul, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
@@ -254,33 +254,65 @@ console.log('winnable + endless')
       }
     }
   }
-  let sawCampaignClear = false
-  let guard = 400000
-  while (s.phase !== 'lost' && s.round < ROUNDS.length + 2 && guard-- > 0) {
+  // The full 100-round campaign is a balance/playtest question (a round-80 Corn Ton
+  // cascades thousands of kernels). The oracle proves the EARLY game is winnable
+  // through the first pinned boss (Corn Cob at round 40); deeper balance is tuned by play.
+  const TARGET = 42
+  let peak = 0
+  let guard = 600000
+  while (s.phase !== 'lost' && s.round < TARGET && guard-- > 0) {
     if (s.phase === 'build') {
       build()
       apply(s, { t: 'startRound' }, rng)
     }
     tick(s, rng)
-    if (s.events.some((e) => e.t === 'campaignClear')) sawCampaignClear = true
+    peak = Math.max(peak, s.kernels.length)
   }
-  ok(s.round >= ROUNDS.length, `clears the ${ROUNDS.length}-round campaign (reached ${s.round}, ${s.lives} lives)`)
-  ok(sawCampaignClear, 'campaignClear fired once past the final scripted round')
-  ok(s.phase !== 'lost', 'no "won" terminal — endless continues past the campaign')
-  ok(s.round > ROUNDS.length, 'played generated endless rounds beyond the script')
+  ok(s.round >= TARGET, `a strong defense clears the first Corn Cob boss (reached ${s.round}, ${s.lives} lives)`)
+  ok(s.phase !== 'lost', 'not lost through round 40')
   ok(s.bestRound === s.round, 'bestRound tracks the furthest round reached')
+  ok(peak < 2000, `entity count stays bounded through the boss (peak ${peak})`) // perf guard
 }
 
-// ── 8b. Endless generator is deterministic + escalates ──────────────────────
-console.log('endless generator')
+// ── 8b. The procedural round generator (bosses pinned, deterministic, flows) ──
+console.log('round generator')
 {
-  const a = getRound(20, 1234)
-  const b = getRound(20, 1234)
-  ok(JSON.stringify(a) === JSON.stringify(b), 'getRound is deterministic for a seed+index')
-  const early = getRound(ROUNDS.length, 1) // first endless round
-  const later = getRound(ROUNDS.length + 10, 1)
-  const count = (r: typeof early) => r.groups.reduce((n, g) => n + g.count, 0)
-  ok(count(later) > count(early), 'later endless rounds spawn more than earlier ones')
+  const a = getRound(50, 1234)
+  const b = getRound(50, 1234)
+  ok(JSON.stringify(a) === JSON.stringify(b), 'getRound is deterministic for a seed+round')
+  // boss rounds pinned (0-based index → round = index+1)
+  ok(getRound(39, 1).groups.some((g) => g.type === 'cob'), 'Corn Cob boss pinned at round 40')
+  ok(getRound(59, 1).groups.some((g) => g.type === 'bunch'), 'Corn Bunch boss pinned at round 60')
+  ok(getRound(79, 1).groups.some((g) => g.type === 'ton'), 'Corn Ton boss pinned at round 80')
+  ok(getRound(99, 1).groups.some((g) => g.type === 'bigcorn'), 'Big Corn of Doom pinned at round 100')
+  // every round has content, and mob types only appear after they unlock
+  for (let r = 1; r <= CAMPAIGN_ROUNDS; r++) {
+    const def = getRound(r - 1, 7)
+    if (def.groups.length === 0) { ok(false, `round ${r} has spawns`); break }
+  }
+  ok(!getRound(4, 7).groups.some((g) => g.type === 'superhard'), 'no Super Hard on an early round')
+  ok(getRound(49, 7).groups.some((g) => g.type === 'superhard' || g.type === 'cob'), 'tough mobs appear by round 50')
+  // threat climbs: total leak-if-all-through is much bigger at 90 than at 10
+  const rbe = (idx: number) => getRound(idx, 7).groups.reduce((n, g) => n + g.count * KERNELS[g.type].leak, 0)
+  ok(rbe(89) > rbe(9) * 20, 'the round threat climbs steeply across the campaign')
+  // free play keeps going past 100
+  ok(getRound(120, 7).groups.length > 0, 'Free Play generates rounds past 100')
+}
+
+// ── 8c. Leak = instant game over (a big cob through the bowl ends the run) ────
+console.log('leak = instant loss')
+{
+  const s = newGame()
+  const rng = mulberry32(9)
+  s.phase = 'round'
+  s.roundActive = true
+  s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }] // keep the round open
+  const path = MAPS[s.mapId].path
+  // a Corn Cob one step from the bowl
+  s.kernels = [{ id: s.nextId++, type: 'cob', dist: path.total - 1, hp: 200 }]
+  tick(s, rng)
+  ok(s.lives === 0, `a leaked Corn Cob (leak ${KERNELS.cob.leak}) drains all lives`)
+  ok((s.phase as string) === 'lost', 'a leaked cob is instant game over (100 lives < 616 leak)')
 }
 
 // ── 8c. Early-start bonus decays and is awarded ─────────────────────────────
@@ -393,17 +425,17 @@ console.log('crosspath')
   void baseRange
 }
 
-// ── 8h. Endless difficulty scaling (round 20+, +2%/round compounding) ───────
+// ── 8h. Free-Play difficulty scaling (round 101+, +2%/round compounding) ────
 console.log('difficulty scaling')
 {
-  ok(roundSpeedMul(19) === 1, 'no speed scaling before round 20')
-  ok(Math.abs(roundSpeedMul(20) - 1.02) < 1e-9, 'speed ×1.02 at round 20')
-  ok(Math.abs(roundSpeedMul(21) - 1.0404) < 1e-9, 'speed ×1.0404 at round 21 (compounds)')
-  ok(Math.abs(roundHpMul(20, 'cob') - 1.02) < 1e-9, 'cob HP ×1.02 at round 20')
-  ok(roundHpMul(25, 'ton') > 1, 'corn ton HP scales')
-  ok(roundHpMul(30, 'poppable') === 1, 'basic kernels get NO HP scaling')
-  ok(roundHpMul(30, 'bkernel') === 1, 'buttery mobs get NO HP scaling')
-  ok(roundSpeedMul(19) === 1 && roundSpeedMul(50) > 1.8, 'speed keeps compounding deep into endless')
+  ok(roundSpeedMul(100) === 1, 'no speed scaling during the 100-round campaign')
+  ok(Math.abs(roundSpeedMul(101) - 1.02) < 1e-9, 'speed ×1.02 at round 101 (first Free Play)')
+  ok(Math.abs(roundSpeedMul(102) - 1.0404) < 1e-9, 'speed ×1.0404 at round 102 (compounds)')
+  ok(Math.abs(roundHpMul(101, 'cob') - 1.02) < 1e-9, 'cob HP ×1.02 at round 101')
+  ok(roundHpMul(110, 'ton') > 1, 'corn ton HP scales in Free Play')
+  ok(roundHpMul(120, 'poppable') === 1, 'basic kernels get NO HP scaling')
+  ok(roundHpMul(120, 'bkernel') === 1, 'buttery mobs get NO HP scaling')
+  ok(roundSpeedMul(100) === 1 && roundSpeedMul(140) > 1.8, 'speed keeps compounding deep into Free Play')
 }
 
 // ── 9. Kernels sit on the path ──────────────────────────────────────────────

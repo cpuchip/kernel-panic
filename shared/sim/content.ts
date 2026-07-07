@@ -8,41 +8,38 @@ import type { KernelType, KernelTypeId, RoundDef, TowerType } from './types.ts'
 // is the default). PATH is re-exported for the oracle's path tests.
 export { PATH } from './maps.ts'
 
-// ── Enemies (Michael's son's design — docs/enemy-design.md) ──────────────────
-// The main pop-chain, biggest first. Speeds are the sheet's numbers (small mobs
-// are FAST, fat mobs slow). "leak" is the sheet's D (lives lost on escape).
+// ── Enemies — roster v2 (Michael's son — docs/enemy-design-v2.md) ────────────
+// Faithful Bloons-TD port. Speeds are his relative "×" units (SPEED_SCALE maps
+// them onto the board). "leak" is his D — lives lost on escape; a big cob leak
+// is instant game over. bounty 0 on the cobs is intentional: their butter comes
+// from the cascade of children they pop into. Freeze/bomb resistances are LATENT
+// (recorded, but do nothing until those towers ship next update).
+const g1 = (type: KernelTypeId, count: number, spread = 12) => ({ type, count, spread })
 
 export const KERNELS: Record<KernelTypeId, KernelType> = {
+  // ── Basic chain (1 HP each, Bloons layers) ──
   poppable: { id: 'poppable', name: 'Poppable Corn Kernel', hp: 1, speed: 100, bounty: 1, leak: 1, radius: 7, color: '#f4d58d' },
-  kernel: {
-    id: 'kernel', name: 'Corn Kernel', hp: 2, speed: 125, bounty: 2, leak: 2, radius: 8, color: '#f0c85a',
-    children: { type: 'poppable', count: 1, spread: 10 },
-  },
-  hard: {
-    id: 'hard', name: 'Hard Kernel', hp: 3, speed: 150, bounty: 3, leak: 3, radius: 9, color: '#d9a441',
-    children: { type: 'kernel', count: 1, spread: 10 },
-  },
-  cob: {
-    id: 'cob', name: 'Corn Cob', hp: 20, speed: 75, bounty: 10, leak: 20, radius: 15, color: '#e8c14a', cobShape: true,
-    children: { type: 'hard', count: 4, spread: 12 },
-  },
-  bunch: {
-    id: 'bunch', name: 'Corn Bunch', hp: 50, speed: 50, bounty: 20, leak: 50, radius: 19, color: '#e0b53a',
-    cobShape: true,
-    children: { type: 'cob', count: 4, spread: 16 },
-  },
-  ton: {
-    id: 'ton', name: 'Corn Ton', hp: 100, speed: 25, bounty: 50, leak: 100, radius: 24, color: '#e8c14a',
-    boss: true, cobShape: true,
-    children: { type: 'bunch', count: 4, spread: 20 },
-  },
-  // ── Bonus mobs ──
-  shiney: {
-    id: 'shiney', name: 'Shiney Kernel', hp: 5, speed: 100, bounty: 10, leak: 5, radius: 9, color: '#fff3b0',
-    resistLaser: true, // the shiny coat bounces the beam right off
-    children: { type: 'kernel', count: 1, spread: 10 },
-  },
-  // The buttery trio: leak 0 (can't hurt you), huge bounty, very fast — catch them for the payout.
+  kernel: { id: 'kernel', name: 'Corn Kernel', hp: 1, speed: 125, bounty: 2, leak: 2, radius: 8, color: '#f0c85a', children: [g1('poppable', 1)] },
+  hard: { id: 'hard', name: 'Hard Kernel', hp: 1, speed: 150, bounty: 3, leak: 3, radius: 9, color: '#d9a441', children: [g1('kernel', 1)] },
+  // ── Rush kernels (fast, no split, they HURT if they leak) ──
+  kettle: { id: 'kettle', name: 'Kettle Corn', hp: 1, speed: 200, bounty: 1, leak: 4, radius: 8, color: '#c8822e' },
+  candy: { id: 'candy', name: 'Candy Corn', hp: 1, speed: 250, bounty: 1, leak: 5, radius: 8, color: '#f0932e' },
+  // ── Immunity kernels (freeze/bomb resist LATENT) ──
+  black: { id: 'black', name: 'Black Kernel', hp: 1, speed: 150, bounty: 1, leak: 6, radius: 9, color: '#3a3330', resistBomb: true },
+  white: { id: 'white', name: 'White Kernel', hp: 1, speed: 150, bounty: 1, leak: 6, radius: 9, color: '#f5f0e0', resistFreeze: true },
+  blackwhite: { id: 'blackwhite', name: 'Black-and-White Kernel', hp: 1, speed: 175, bounty: 1, leak: 7, radius: 9, color: '#9a9088', resistBomb: true, resistFreeze: true, children: [g1('black', 1), g1('white', 1)] },
+  purple: { id: 'purple', name: 'Purple Kernel', hp: 1, speed: 200, bounty: 1, leak: 7, radius: 9, color: '#9a5cc8', resistLaser: true, resistFreeze: true },
+  melted: { id: 'melted', name: 'Melted Kernel', hp: 5, speed: 100, bounty: 1, leak: 7, radius: 10, color: '#b06a3a', resistLaser: true },
+  rainbow: { id: 'rainbow', name: 'Rainbow Kernel', hp: 1, speed: 200, bounty: 1, leak: 8, radius: 10, color: '#d94f8a', children: [g1('blackwhite', 2)] },
+  superhard: { id: 'superhard', name: 'Super Hard Kernel', hp: 10, speed: 200, bounty: 1, leak: 9, radius: 11, color: '#8a8f9a', children: [g1('rainbow', 2)] },
+  shiney: { id: 'shiney', name: 'Shiney Kernel', hp: 5, speed: 100, bounty: 10, leak: 5, radius: 9, color: '#fff3b0', resistLaser: true, children: [g1('kernel', 1)] },
+  // ── Cob bosses (MOAB class; bounty 0, butter comes from the cascade) ──
+  cob: { id: 'cob', name: 'Corn Cob', hp: 200, speed: 75, bounty: 0, leak: 616, radius: 15, color: '#e8c14a', cobShape: true, children: [g1('superhard', 4, 14)] },
+  quickcob: { id: 'quickcob', name: 'Quick Cob', hp: 400, speed: 200, bounty: 0, leak: 816, radius: 14, color: '#e8b84a', cobShape: true, children: [g1('superhard', 4, 14)] },
+  bunch: { id: 'bunch', name: 'Corn Bunch', hp: 1400, speed: 50, bounty: 0, leak: 3064, radius: 19, color: '#e0b53a', cobShape: true, children: [g1('cob', 4, 16)] },
+  ton: { id: 'ton', name: 'Corn Ton', hp: 4000, speed: 25, bounty: 0, leak: 16656, radius: 24, color: '#e8c14a', boss: true, cobShape: true, children: [g1('bunch', 4, 20)] },
+  bigcorn: { id: 'bigcorn', name: 'Big Corn of Doom', hp: 20000, speed: 25, bounty: 0, leak: 55760, radius: 30, color: '#caa63a', boss: true, cobShape: true, children: [g1('ton', 2, 24), g1('quickcob', 3, 18)] },
+  // ── Buttery trio (leak 0, huge bounty, very fast — catch for the payout) ──
   bkernel: { id: 'bkernel', name: 'Buttery Corn Kernel', hp: 8, speed: 500, bounty: 1000, leak: 0, radius: 10, color: '#ffd54a' },
   bpopcorn: { id: 'bpopcorn', name: 'Buttery Popcorn', hp: 12, speed: 750, bounty: 2500, leak: 0, radius: 11, color: '#ffe07a' },
   bcob: { id: 'bcob', name: 'Buttery Corn Cob', hp: 50, speed: 500, bounty: 10000, leak: 0, radius: 16, color: '#ffd54a', cobShape: true },
@@ -142,54 +139,99 @@ export const TOWERS: Record<string, TowerType> = {
 
 export const TOWER_ORDER = ['fire', 'microwave', 'laser', 'churn'] as const
 
-// ── Waves 1-20 — Michael's son's wave chart (2026-07-06) ─────────────────────
-// Transcribed exactly from his hand-drawn sheet: per-wave counts are HIS; the
-// spawn timing (gaps/delays) and clear bonuses are tuned to keep it winnable.
-// After wave 20 it's Free Play (the endless generator below). Every mob pops
-// into a chain of children, so a single Corn Cob is really 4 Hard = a dozen+
-// small kernels. Counts/bonuses are DATA — his to tune.
+// ── The round system — a procedural 100-round curve (docs/enemy-design-v2.md) ──
+// Boss rounds are PINNED (Corn Cob 40, Corn Bunch 60, Corn Ton 80, Big Corn of
+// Doom 100); everything in between FLOWS: a threat budget grows with the round
+// and is spent on whatever mob types have unlocked, strongest-first but kept a
+// mix. After round 100 it's Free Play (endless, ever-escalating). Fully
+// deterministic in (seed, round). Ratified: our own numbers in the BTD spirit,
+// nobody hand-authors 100 rounds. It's all DATA — balance rides on this curve.
+
+export const CAMPAIGN_ROUNDS = 100
 
 function g(type: KernelTypeId, count: number, gap: number, delay = 0) {
   return { type, count, gap, delay }
 }
 
-export const ROUNDS: RoundDef[] = [
-  { groups: [g('poppable', 10, 20)], bonus: 60 }, // 1
-  { groups: [g('poppable', 20, 16)], bonus: 70 }, // 2
-  { groups: [g('poppable', 25, 14), g('kernel', 5, 30, 120)], bonus: 80 }, // 3
-  { groups: [g('poppable', 30, 12), g('kernel', 10, 22, 120)], bonus: 95 }, // 4
-  { groups: [g('poppable', 15, 16), g('hard', 3, 40, 120), g('bkernel', 1, 0, 260)], bonus: 120 }, // 5 — first buttery
-  { groups: [g('poppable', 20, 12), g('kernel', 15, 16, 120), g('hard', 10, 24, 320)], bonus: 140 }, // 6
-  { groups: [g('hard', 20, 16)], bonus: 150 }, // 7
-  { groups: [g('poppable', 50, 8)], bonus: 170 }, // 8
-  { groups: [g('shiney', 5, 40)], bonus: 160 }, // 9 — laser-proof
-  { groups: [g('kernel', 50, 10)], bonus: 220 }, // 10
-  { groups: [g('poppable', 25, 10), g('kernel', 20, 14, 150), g('hard', 15, 20, 360), g('bkernel', 1, 0, 300)], bonus: 280 }, // 11
-  { groups: [g('hard', 15, 18), g('kernel', 20, 12, 200), g('shiney', 10, 30, 420)], bonus: 300 }, // 12
-  { groups: [g('poppable', 60, 7), g('kernel', 40, 9, 160), g('hard', 25, 16, 380)], bonus: 360 }, // 13
-  { groups: [g('poppable', 100, 5)], bonus: 340 }, // 14
-  { groups: [g('cob', 1, 0)], bonus: 300 }, // 15 — first Corn Cob
-  { groups: [g('hard', 20, 14), g('kernel', 25, 10, 140), g('cob', 1, 0, 360)], bonus: 420 }, // 16
-  { groups: [g('cob', 2, 120)], bonus: 480 }, // 17
-  { groups: [g('kernel', 100, 6)], bonus: 520 }, // 18
-  { groups: [g('cob', 3, 110)], bonus: 640 }, // 19
-  { groups: [g('bunch', 1, 0), g('bpopcorn', 1, 0, 240)], bonus: 900 }, // 20 — Corn Bunch + buttery jackpot
+// round at which each mob first shows up in NORMAL rounds (bosses also pinned below)
+const UNLOCK: [KernelTypeId, number][] = [
+  ['poppable', 1], ['kernel', 2], ['hard', 4],
+  ['kettle', 11], ['candy', 12], ['black', 13], ['white', 15],
+  ['blackwhite', 21], ['melted', 23], ['purple', 25], ['rainbow', 27],
+  ['superhard', 31],
+  ['cob', 41], ['bunch', 61], ['quickcob', 62], ['ton', 81],
 ]
+// rough threat cost per mob — drives how many fit in a round's budget
+const THREAT: Partial<Record<KernelTypeId, number>> = {
+  poppable: 1, kernel: 2, hard: 3, kettle: 4, candy: 5,
+  black: 6, white: 6, blackwhite: 7, purple: 8, melted: 9,
+  rainbow: 16, superhard: 34, cob: 320, quickcob: 380, bunch: 1300, ton: 5200,
+}
 
-/** Endless: rounds past the campaign, escalating deterministically from seed. */
+function threatBudget(r: number): number {
+  return Math.round(4 * Math.pow(r, 1.7))
+}
+function roundBonus(r: number): number {
+  // generous: cob bodies pay 0 bounty, so bonuses + the child-cascade carry the economy
+  return Math.round(45 + r * 9 + Math.pow(r, 1.5) * 1.4)
+}
+function rng01(seed: number, r: number): number {
+  return ((seed ^ Math.imul(r + 1, 2654435761)) >>> 0) / 4294967296
+}
+
+function normalRound(r: number, seed: number): RoundDef {
+  let budget = threatBudget(r)
+  const unlocked = UNLOCK.filter(([, u]) => u <= r).map(([t]) => t)
+    .sort((a, b) => (THREAT[b] ?? 0) - (THREAT[a] ?? 0)) // strong → weak
+  const groups: ReturnType<typeof g>[] = []
+  let delay = 0
+  for (let i = 0; i < unlocked.length && budget > 4; i++) {
+    const t = unlocked[i]
+    const cost = THREAT[t] ?? 1
+    // stronger tiers take a smaller share so a round stays a MIX, not a wall of the toughest
+    const share = i === 0 ? 0.5 : 0.55
+    const count = Math.floor((budget * share) / cost)
+    if (count <= 0) continue
+    const gap = Math.max(6, Math.round(280 / Math.max(4, count))) // denser groups spawn faster
+    groups.push(g(t, count, gap, delay))
+    budget -= count * cost
+    delay += 40
+  }
+  if (budget > 0) groups.push(g('poppable', budget, 10, delay)) // leftover → fodder
+  // sprinkle a buttery reward now and then (mid-round, late)
+  if (r >= 5 && r % 8 === 5) {
+    const b: KernelTypeId = r < 30 ? 'bkernel' : r < 60 ? 'bpopcorn' : 'bcob'
+    groups.push(g(b, 1, 0, 260 + Math.floor(rng01(seed, r) * 120)))
+  }
+  return { groups, bonus: roundBonus(r) }
+}
+
+function bossRound(boss: KernelTypeId, r: number, seed: number): RoundDef {
+  // the boss + a modest escort (a third of the normal round, delayed behind it)
+  const escort = normalRound(r, seed).groups.slice(0, 2)
+    .map((grp) => ({ ...grp, count: Math.max(1, Math.floor(grp.count / 3)), delay: (grp.delay ?? 0) + 120 }))
+  return { groups: [g(boss, 1, 0, 0), ...escort], bonus: roundBonus(r) + 300 }
+}
+
+/** The round for a 0-based index. Rounds 1-100 are the campaign; 101+ is Free Play. */
 export function getRound(index: number, seed: number): RoundDef {
-  if (index < ROUNDS.length) return ROUNDS[index]
-  const over = index - ROUNDS.length + 1 // 1, 2, 3, …
-  const r = ((seed ^ Math.imul(index + 1, 2654435761)) >>> 0) / 4294967296
-  const tons = 3 + Math.floor(over / 2)
-  const bunches = 6 + over * 2
-  const gap = Math.max(60, 220 - over * 12)
-  const groups = [
-    g('ton', tons, gap),
-    g('bunch', bunches, Math.max(50, 90 - over * 3), 120),
-    g('bcob', 1 + Math.floor(over / 3), 0, 400 + Math.floor(r * 60)),
-  ]
-  return { groups, bonus: 400 + over * 40 }
+  const r = index + 1
+  if (r === 40) return bossRound('cob', r, seed)
+  if (r === 60) return bossRound('bunch', r, seed)
+  if (r === 80) return bossRound('ton', r, seed)
+  if (r === 100) return { groups: [g('bigcorn', 1, 0, 0)], bonus: roundBonus(r) + 2000 }
+  if (r <= CAMPAIGN_ROUNDS) return normalRound(r, seed)
+  // Free Play (101+): keep escalating past the campaign
+  const over = r - CAMPAIGN_ROUNDS
+  const rr = rng01(seed, r)
+  return {
+    groups: [
+      g('ton', 1 + Math.floor(over / 3), Math.max(40, 200 - over * 6)),
+      g('bunch', 3 + over, Math.max(50, 120 - over * 3), 120),
+      g('bcob', 1 + Math.floor(over / 4), 0, 400 + Math.floor(rr * 80)),
+    ],
+    bonus: roundBonus(CAMPAIGN_ROUNDS) + over * 200,
+  }
 }
 
 /** Effective dph/sps/income given the tiers bought across all paths (each stat
