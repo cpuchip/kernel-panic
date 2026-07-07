@@ -13,10 +13,12 @@ import { settings } from './settings.svelte.ts'
 export type SfxName =
   | 'pop' | 'bosspop' | 'laser' | 'microwave' | 'fire' | 'leak'
   | 'roundclear' | 'bossin' | 'place' | 'sell' | 'start'
+  | 'jackpot' | 'upgrade'
 
 const GAIN: Record<SfxName, number> = {
   pop: 0.6, bosspop: 0.8, laser: 0.45, microwave: 0.5, fire: 0.32, leak: 0.65,
   roundclear: 0.65, bossin: 0.75, place: 0.5, sell: 0.5, start: 0.55,
+  jackpot: 0.7, upgrade: 0.55,
 }
 
 let ctx: AudioContext | null = null

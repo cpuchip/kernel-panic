@@ -31,7 +31,11 @@ export interface View {
 // ── Sprites (carnival-cartoon art; fall back to shapes until loaded) ─────────
 const SPRITES: Record<string, HTMLImageElement> = {}
 if (typeof Image !== 'undefined') {
-  for (const n of ['plain', 'buttered', 'caramel', 'cob', 'fire', 'microwave', 'laser', 'churn']) {
+  for (const n of [
+    // 10 mobs (distinct art) + 4 towers
+    'poppable', 'kernel', 'hard', 'cob', 'bunch', 'ton', 'shiney', 'bkernel', 'bpopcorn', 'bcob',
+    'fire', 'microwave', 'laser', 'churn',
+  ]) {
     const img = new Image()
     img.src = `/assets/sprites/${n}.png`
     SPRITES[n] = img
@@ -195,11 +199,13 @@ function drawTowers(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   }
 }
 
-// New 10-mob roster maps onto the existing 4 sprites (art-polish per mob later).
+// Each of the 10 mobs now has its own sprite (kp mob art, 2026-07-07). The map
+// is identity, but keeping it explicit lets any mob fall back to a sibling if a
+// sprite is ever missing (the renderer also falls back to drawn shapes).
 const KERNEL_SPRITE: Record<string, string> = {
-  poppable: 'plain', kernel: 'plain', hard: 'plain', shiney: 'buttered',
-  cob: 'cob', bunch: 'cob', ton: 'cob', bcob: 'cob',
-  bkernel: 'buttered', bpopcorn: 'caramel',
+  poppable: 'poppable', kernel: 'kernel', hard: 'hard', shiney: 'shiney',
+  cob: 'cob', bunch: 'bunch', ton: 'ton', bcob: 'bcob',
+  bkernel: 'bkernel', bpopcorn: 'bpopcorn',
 }
 
 function drawKernels(ctx: CanvasRenderingContext2D, s: SimState): void {

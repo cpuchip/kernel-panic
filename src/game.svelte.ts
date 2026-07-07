@@ -144,10 +144,12 @@ function loop(now: number): void {
 function ingestEvents(): void {
   for (const e of sim.events) {
     switch (e.t) {
-      case 'pop':
+      case 'pop': {
+        const buttery = e.kind === 'bkernel' || e.kind === 'bpopcorn' || e.kind === 'bcob'
         fx.push({ kind: 'pop', x: e.x!, y: e.y!, life: e.boss ? 0.5 : 0.3, max: e.boss ? 0.5 : 0.3, r: e.boss ? 30 : 12, color: kernelColor(e.kind) })
-        playSfx(e.boss ? 'bosspop' : 'pop')
+        playSfx(buttery ? 'jackpot' : e.boss ? 'bosspop' : 'pop') // buttery mobs = a big payout
         break
+      }
       case 'beam':
         fx.push({ kind: 'beam', x: e.x!, y: e.y!, tx: e.tx!, ty: e.ty!, life: 0.09, max: 0.09, color: '#ff4d6d' })
         playSfx('laser')
@@ -285,7 +287,7 @@ export function selectedTower() {
 }
 
 export function upgradeSelected(path: number): void {
-  if (ui.selectedId !== null && dispatch({ t: 'upgrade', id: ui.selectedId, path })) playSfx('place')
+  if (ui.selectedId !== null && dispatch({ t: 'upgrade', id: ui.selectedId, path })) playSfx('upgrade')
 }
 
 export function sellSelected(): void {

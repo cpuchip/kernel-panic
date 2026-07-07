@@ -60,9 +60,22 @@ SFX = [
      "neg": "voice, hiss",
      "prompt": "A short upbeat go-signal, a quick rising two-tone synth blip that says "
                "'begin', clean, dry, close."},
+    # ── new (2026-07-07) ──
+    {"name": "jackpot", "seconds": 1.6, "seed": 3112, "loop": False, "lufs": -16,
+     "neg": "music, voice, hiss",
+     "prompt": "A big celebratory jackpot cash-register burst, a bright cascade of coins "
+               "spilling with a happy sparkling chime on top, rich and satisfying, dry, "
+               "close perspective."},
+    {"name": "upgrade", "seconds": 1.1, "seed": 3113, "loop": False, "lufs": -16,
+     "neg": "music, voice, hiss",
+     "prompt": "A short bright power-up shimmer, a quick ascending magical sparkle that "
+               "says an upgrade just landed, clean and uplifting, dry, close."},
 ]
 
 if __name__ == "__main__":
+    only = set(sys.argv[1:])  # optional: regenerate just named clips
     for item in SFX:
+        if only and item["name"] not in only:
+            continue
         p = generate(SERVER, item, OUT)
         print(f"generated {item['name']} (seed {item['seed']}) -> {p}")
