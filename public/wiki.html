@@ -188,7 +188,9 @@ const GROUPS = [
   ]},
 ];
 // which sprites actually exist in /assets/sprites (the rest get a placeholder chip)
-const HAVE = new Set(['poppable','kernel','hard','cob','bunch','ton','shiney','bkernel','bpopcorn','bcob','quickcob','bigcorn']);
+const HAVE = new Set(['poppable','kernel','hard','kettle','candy','black','white','blackwhite',
+  'purple','melted','rainbow','superhard','shiney','cob','quickcob','bunch','ton','bigcorn',
+  'bkernel','bpopcorn','bcob']);
 
 function card(m) {
   const art = HAVE.has(m.id)
