@@ -46,6 +46,19 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     res.end(VERSION)
     return
   }
+  // /wiki → the Field Guide (help docs). Clean URL for the static wiki page.
+  if (url === '/wiki' || url === '/wiki/') {
+    readFile(join(DIST, 'wiki.html'), (err, buf) => {
+      if (err) {
+        res.writeHead(404, { 'content-type': 'text/plain' })
+        res.end('wiki not built')
+        return
+      }
+      res.writeHead(200, { 'content-type': MIME['.html'] })
+      res.end(buf)
+    })
+    return
+  }
   const safe = normalize(url).replace(/^([.\\/])+/, '')
   let file = join(DIST, safe === '' ? 'index.html' : safe)
   if (!existsSync(file) || extname(file) === '') file = join(DIST, 'index.html')

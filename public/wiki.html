@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Kernel Panic — Field Guide</title>
+<style>
+  :root {
+    --bg: #1b1410; --panel: #241812; --line: #3a2a1c; --dim: #b08d6a;
+    --pop: #ff8a4c; --gold: #f4d58d; --butter: #f2d16b; --danger: #f2807a;
+    --ok: #8fd17a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(120% 90% at 50% 0%, #2a1d14 0%, var(--bg) 60%);
+    color: var(--gold); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    min-height: 100dvh; padding: 0 clamp(12px, 4vw, 40px) 60px;
+  }
+  a { color: var(--pop); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header.top {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 20px 2px 8px; max-width: 1080px; margin: 0 auto;
+  }
+  .brand { font-weight: 800; font-size: clamp(22px, 5vw, 30px); letter-spacing: .02em;
+    text-transform: lowercase; color: var(--pop); }
+  .brand span { color: var(--gold); }
+  .sub { color: var(--dim); font-size: 14px; }
+  .grow { flex: 1; }
+  nav.wikinav { display: flex; gap: 8px; flex-wrap: wrap; max-width: 1080px; margin: 0 auto 4px;
+    padding: 6px 2px; position: sticky; top: 0; background: linear-gradient(var(--bg), var(--bg) 70%, transparent);
+    z-index: 5; }
+  nav.wikinav a { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--gold); font-size: 13px; background: var(--panel); }
+  nav.wikinav a.on { border-color: var(--pop); color: var(--pop); }
+  main { max-width: 1080px; margin: 0 auto; }
+  .intro { color: var(--dim); max-width: 70ch; margin: 6px 2px 20px; }
+  .intro b { color: var(--gold); }
+
+  section { margin: 28px 0; scroll-margin-top: 54px; }
+  h2 { font-size: 20px; color: var(--pop); border-bottom: 1px solid var(--line);
+    padding-bottom: 6px; margin: 0 0 4px; }
+  .grouphint { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
+
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .card .art { height: 92px; display: flex; align-items: center; justify-content: center; }
+  .card .art img { max-height: 92px; max-width: 100%; image-rendering: auto;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,.5)); }
+  .ph { width: 66px; height: 66px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 26px; border: 2px dashed var(--line); color: var(--dim);
+    background: #2016100; }
+  .name { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .rar { font-size: 11px; color: var(--dim); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 12.5px;
+    font-variant-numeric: tabular-nums; }
+  .stats span b { color: var(--gold); font-weight: 600; }
+  .stats .k { color: var(--dim); }
+  .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); }
+  .tag.leak { color: var(--danger); border-color: #5a2a26; }
+  .tag.res { color: #7fb0e8; border-color: #274766; }
+  .tag.soon { color: var(--dim); }
+  .tag.pop { color: var(--gold); border-color: var(--line); }
+  .tag.butter { color: var(--butter); border-color: #5a4a1e; }
+
+  table.rounds { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.rounds td, table.rounds th { border: 1px solid var(--line); padding: 7px 10px; text-align: left; }
+  table.rounds th { color: var(--pop); background: var(--panel); }
+  table.rounds tr.boss td { color: var(--pop); font-weight: 600; }
+  .note { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pop);
+    border-radius: 8px; padding: 10px 14px; margin: 14px 0; color: var(--dim); }
+  .note b { color: var(--gold); }
+  footer { max-width: 1080px; margin: 40px auto 0; color: var(--dim); font-size: 12.5px;
+    border-top: 1px solid var(--line); padding-top: 14px; }
+  code { background: #16100c; border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
+    font-size: 12.5px; color: var(--gold); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">kernel&nbsp;<span>panic</span></div>
+  <div class="sub">Field Guide</div>
+  <div class="grow"></div>
+  <a href="/">▶ play</a>
+</header>
+
+<nav class="wikinav">
+  <a href="#enemies" class="on">Enemies</a>
+  <a href="#rounds">Rounds</a>
+  <a href="#towers">Towers</a>
+  <a href="#maps">Maps</a>
+</nav>
+
+<main>
+  <p class="intro">
+    Everything that walks the kitchen, popped open. Designed by Michael's son and built into the
+    game. <b>Butter</b> is what you earn per pop; <b>D</b> is how many lives you lose if a kernel
+    reaches the bowl — and a leak is <b>instant game over</b> if it's big enough, so don't let the
+    cobs through. Bigger enemies <b>pop into</b> smaller ones, just like Bloons.
+  </p>
+
+  <section id="enemies"></section>
+
+  <section id="rounds">
+    <h2>The round system</h2>
+    <p class="grouphint">100 rounds, then endless Free Play. Boss rounds are fixed; everything in
+      between ramps up smoothly.</p>
+    <div class="note"><b>How rounds flow:</b> new kernel types phase in as the round climbs — rush
+      kernels, then the immunity colours, then the tanky ceramic-tier — and the counts grow. The
+      four big cobs are pinned to milestone rounds so you always know when a boss is coming.</div>
+    <table class="rounds">
+      <thead><tr><th>Round</th><th>What shows up</th><th>Boss</th></tr></thead>
+      <tbody>
+        <tr><td>1–10</td><td>Poppable → Corn Kernel → Hard Kernel</td><td>—</td></tr>
+        <tr><td>11–20</td><td>+ Kettle &amp; Candy rushes, first Black / White</td><td>—</td></tr>
+        <tr><td>21–30</td><td>+ Zebra, Purple, Melted, Rainbow</td><td>—</td></tr>
+        <tr><td>31–39</td><td>+ Super Hard (ceramic-tier)</td><td>—</td></tr>
+        <tr class="boss"><td>40</td><td>first Corn Cob</td><td>🌽 Corn Cob</td></tr>
+        <tr><td>41–59</td><td>Corn Cobs + immunity mixes</td><td>—</td></tr>
+        <tr class="boss"><td>60</td><td>first Corn Bunch</td><td>🌽 Corn Bunch</td></tr>
+        <tr><td>61–79</td><td>Bunches + Quick Cob rushes</td><td>—</td></tr>
+        <tr class="boss"><td>80</td><td>first Corn Ton</td><td>🌽 Corn Ton</td></tr>
+        <tr><td>81–99</td><td>Tons + Quick Cob swarms</td><td>—</td></tr>
+        <tr class="boss"><td>100</td><td>the final boss</td><td>💀 Big Corn of Doom</td></tr>
+        <tr><td>101+</td><td>Free Play — endless, ever-escalating</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>Coming next update:</b> <b>freezing</b> and <b>bombs</b> — new towers, and
+      the black / white / zebra / purple kernels' resistances switch on. Plus a Butter Churn upgrade
+      that gives you lives back.</div>
+  </section>
+
+  <section id="towers">
+    <h2>Towers</h2>
+    <p class="grouphint">Fire Tosser, Microwave, Laser, and the Butter Churn — each with three
+      upgrade paths (pick two). Full guide coming to the wiki soon.</p>
+  </section>
+
+  <section id="maps">
+    <h2>Maps</h2>
+    <p class="grouphint">Classic Kitchen, Twisty, Corn Meadow, Loop-de-doop, Triangle Chaos. Map
+      guide coming to the wiki soon.</p>
+  </section>
+</main>
+
+<footer>
+  Kernel Panic Field Guide · enemy roster designed by Michael's son · art generated on our own
+  license-clean pipeline · <span id="ver"></span>
+</footer>
+
+<script>
+// The ratified v2 roster (docs/enemy-design-v2.md). sprite:null → art still in progress.
+const RES = { L:'resists laser', F:'resists freeze', B:'resists bomb' };
+const GROUPS = [
+  { title: 'Basic chain', hint: 'The bread and butter — one hit each, they split down to nothing.', mobs: [
+    { id:'poppable', name:'Poppable Corn Kernel', rar:'common', sp:100, hp:1, bt:1, d:1, pop:'—' },
+    { id:'kernel', name:'Corn Kernel', rar:'common', sp:125, hp:1, bt:1, d:2, pop:'1 Poppable' },
+    { id:'hard', name:'Hard Kernel', rar:'common', sp:150, hp:1, bt:1, d:3, pop:'1 Corn Kernel' },
+  ]},
+  { title: 'Rush kernels', hint: 'Fast and fragile — easy to pop, but they HURT if they slip past.', mobs: [
+    { id:'kettle', name:'Kettle Corn', rar:'common', sp:200, hp:1, bt:1, d:4, pop:'—' },
+    { id:'candy', name:'Candy Corn', rar:'common', sp:250, hp:1, bt:1, d:5, pop:'—' },
+  ]},
+  { title: 'Immunity kernels', hint: 'Each shrugs off a damage type. Freeze & bomb resistances switch on next update.', mobs: [
+    { id:'black', name:'Black Kernel', rar:'rare', sp:150, hp:1, bt:1, d:6, pop:'—', res:['B'] },
+    { id:'white', name:'White Kernel', rar:'rare', sp:150, hp:1, bt:1, d:6, pop:'—', res:['F'] },
+    { id:'blackwhite', name:'Black-and-White Kernel', rar:'rare', sp:175, hp:1, bt:1, d:7, pop:'1 Black + 1 White', res:['B','F'] },
+    { id:'purple', name:'Purple Kernel', rar:'rare', sp:200, hp:1, bt:1, d:7, pop:'—', res:['L','F'] },
+    { id:'melted', name:'Melted Kernel', rar:'rare', sp:100, hp:5, bt:1, d:7, pop:'—', res:['L'] },
+    { id:'shiney', name:'Shiney Kernel', rar:'very rare', sp:100, hp:5, bt:10, d:5, pop:'1 Corn Kernel', res:['L'] },
+    { id:'rainbow', name:'Rainbow Kernel', rar:'rare', sp:200, hp:1, bt:1, d:8, pop:'2 Black-and-White' },
+    { id:'superhard', name:'Super Hard Kernel', rar:'rare', sp:200, hp:10, bt:1, d:9, pop:'2 Rainbow' },
+  ]},
+  { title: 'Cob bosses', hint: 'The MOAB class. Slow, huge HP, and a leak is game over. Each cracks into four of the next tier down.', mobs: [
+    { id:'cob', name:'Corn Cob', rar:'very rare', sp:75, hp:200, bt:0, d:616, pop:'4 Super Hard' },
+    { id:'quickcob', name:'Quick Cob', rar:'rare', sp:200, hp:400, bt:0, d:816, pop:'4 Super Hard' },
+    { id:'bunch', name:'Corn Bunch', rar:'rarest', sp:50, hp:1400, bt:0, d:3064, pop:'4 Corn Cob' },
+    { id:'ton', name:'Corn Ton', rar:'rarest', sp:25, hp:4000, bt:0, d:16656, pop:'4 Corn Bunch' },
+    { id:'bigcorn', name:'Big Corn of Doom', rar:'rarest', sp:25, hp:20000, bt:0, d:55760, pop:'2 Corn Ton + 3 Quick Cob', boss:true },
+  ]},
+  { title: 'Buttery bonus', hint: 'Harmless (they cost no lives) but fast — catch them for a huge butter payout.', mobs: [
+    { id:'bkernel', name:'Buttery Corn Kernel', rar:'very rare', sp:500, hp:8, bt:1000, d:0, pop:'—' },
+    { id:'bpopcorn', name:'Buttery Popcorn', rar:'very rare', sp:750, hp:12, bt:2500, d:0, pop:'—' },
+    { id:'bcob', name:'Buttery Corn Cob', rar:'rarest', sp:500, hp:50, bt:10000, d:0, pop:'—' },
+  ]},
+];
+// which sprites actually exist in /assets/sprites (the rest get a placeholder chip)
+const HAVE = new Set(['poppable','kernel','hard','cob','bunch','ton','shiney','bkernel','bpopcorn','bcob','quickcob','bigcorn']);
+
+function card(m) {
+  const art = HAVE.has(m.id)
+    ? `<img src="/assets/sprites/${m.id}.png" alt="${m.name}" loading="lazy">`
+    : `<div class="ph" title="art in progress">🌽</div>`;
+  const res = (m.res || []).map(r => `<span class="tag res" title="${RES[r]}">${r==='L'?'laser-proof':r==='F'?'freeze-proof*':'bomb-proof*'}</span>`).join('');
+  const leak = m.d > 0 ? `<span class="tag leak" title="lives lost if it leaks">💔 ${m.d.toLocaleString()}</span>`
+                       : `<span class="tag butter">no leak</span>`;
+  const pop = m.pop && m.pop !== '—' ? `<span class="tag pop">↳ ${m.pop}</span>` : '';
+  return `<div class="card">
+    <div class="art">${art}</div>
+    <div class="name">${m.name}${m.boss?' 💀':''}<span class="rar">· ${m.rar}</span></div>
+    <div class="stats">
+      <span class="k">Speed</span><span><b>${m.sp}</b>×</span>
+      <span class="k">HP</span><span><b>${m.hp.toLocaleString()}</b></span>
+      <span class="k">Butter</span><span><b>${m.bt.toLocaleString()}</b> 🧈</span>
+      <span class="k">Leak</span><span><b>${m.d.toLocaleString()}</b> 💔</span>
+    </div>
+    <div class="tags">${leak}${res}${pop}</div>
+  </div>`;
+}
+
+const enemies = document.getElementById('enemies');
+enemies.innerHTML = '<h2>Enemies</h2><p class="grouphint">21 kernels, popped open. * = resistance that turns on next update.</p>' +
+  GROUPS.map(g => `<div style="margin:18px 0"><h3 style="color:var(--gold);font-size:15px;margin:0 0 3px">${g.title}</h3>
+    <p class="grouphint" style="margin:0 0 10px">${g.hint}</p>
+    <div class="grid">${g.mobs.map(card).join('')}</div></div>`).join('');
+
+// tiny nav highlight + version
+fetch('/version').then(r=>r.text()).then(v=>{ document.getElementById('ver').textContent = 'build ' + v.trim(); }).catch(()=>{});
+</script>
+</body>
+</html>

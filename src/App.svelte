@@ -155,7 +155,7 @@
   {/if}
 </main>
 
-<span class="ver">kernel panic · {__BUILD_SHA__}</span>
+<span class="ver"><a href="/wiki" target="_blank" rel="noopener">📖 field guide</a> · kernel panic · {__BUILD_SHA__}</span>
 
 <style>
   main {
@@ -334,6 +334,8 @@
   .mapblurb { font-size: 11px; color: var(--dim); line-height: 1.25; }
 
   .ver { position: fixed; bottom: 3px; right: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
+  .ver a { color: var(--pop); pointer-events: auto; text-decoration: none; }
+  .ver a:hover { text-decoration: underline; }
 
   @media (min-width: 620px) {
     .tw { flex: 0 0 auto; }

@@ -1,16 +1,17 @@
-# Kernel Panic — Enemy Roster v2 + BTD6 Round System (FOR RATIFICATION)
+# Kernel Panic — Enemy Roster v2 + BTD6 Round System (RATIFIED)
 
-**Status: DRAFT — not built yet.** Michael's son handed over a big new "corn mod" chart
-(2026-07-07) that ~triples the roster and asks us to **copy the BTD6 round system up to
-round 100**. This document transcribes his chart into tables, maps it onto the Bloons
-lineage it's clearly modeled on, and flags every place I'm guessing so you two can ratify
-before I build anything. Michael flagged this one as "long, you may need help from us" —
-the **Open Questions** at the bottom are where I need that help.
+**Status: RATIFIED 2026-07-07 — cleared to build.** Michael's son handed over a big new
+"corn mod" chart that ~doubles the roster and asks us to **copy the BTD6 round system up to
+round 100**. This document transcribes his chart, maps it onto the Bloons lineage it's
+modeled on, and — as of 2026-07-07 — records Michael + son's decisions on every open
+question. The **Ratified Decisions** section (was Open Questions) is now the build spec.
 
-> **Next update (his note):** we'll add **freezing** and **bombs** (tower types + the
-> matching enemy resistances). So the freeze/bomb *resistances* below are **latent** — I'd
-> record them now but they do nothing until those towers exist. Only **laser resistance** is
-> live today.
+> **Filed for the NEXT update (Michael's notes):**
+> - **Freezing + bombs** — new tower types + the matching enemy resistances. The freeze/bomb
+>   *resistances* below are **latent** (recorded, but do nothing until those towers exist).
+>   Only **laser resistance** is live today.
+> - **A Butter Churn upgrade that grants LIVES** — since a leaked mob is instant-death (per
+>   Bloons), the churn will get a path/tier that gives back lives. Not this update.
 
 Legend from his sheet: **D = damage dealt** = lives lost if that mob leaks into the bowl ·
 **amount spawned = when popped** (the arrow numbers) · rarity **○ common · ◇ rare · ★ very
@@ -28,7 +29,7 @@ board). ✅ = read cleanly off the chart · ⚠️ = I'm unsure, see Open Questi
 | Mob | Speed | HP | Butter | D (leak) | Pops into | Notes |
 |-----|------:|---:|-------:|---------:|-----------|-------|
 | Poppable Corn Kernel | 100 | 1 | 1 | 1 | — (gone) | exists today |
-| Corn Kernel | 125 | 1 ⚠️ | 1 | 2 | 1 Poppable | today it's HP 2 — chart looks like HP 1 |
+| Corn Kernel | 125 | 1 | 1 | 2 | 1 Poppable | HP 1 ratified (Bloons layers; was 2) |
 | Hard Kernel | 150 | 1 | 1 | 3 | 1 Corn Kernel | exists today |
 
 ### Rush kernels (fast, glass-cannon — cheap to pop, hurt a lot if they leak)
@@ -108,10 +109,9 @@ when those towers ship next update.
 | White Kernel | | ✅ | |
 | Zebra (Black-and-White) | | ✅ | ✅ |
 | Purple Kernel | ✅ | ✅ | |
-| Rainbow / Super Hard | ⚠️ ? | ⚠️ ? | ⚠️ ? |
+| Rainbow / Super Hard | | | |
 
-In BTD, rainbow and ceramic aren't immune to anything — just fast/tanky. I've assumed the
-same (no immunities) unless you tell me otherwise.
+Rainbow and Super Hard have **no immunities** (ratified) — just fast / high-HP, like Bloons.
 
 ---
 
@@ -153,30 +153,31 @@ numbers that might change.
 
 ---
 
-## 5. Open Questions (need you + your son)
+## 5. Ratified Decisions (2026-07-07, Michael + son)
 
-1. **Corn Kernel HP** — chart looks like **HP 1**; today it's HP 2. Which is right?
-2. **Pop tree, the inferred edges** — confirm: Corn Cob → 4 Super Hard? Super Hard → 2
-   Rainbow? Rainbow → 2 Zebra? Quick Cob → 4 Super Hard? And **Big Corn of Doom → 2 Corn Ton
-   + 3 Quick Cob**? (I read "2" and "3" arrows on it.)
-3. **"16 corn nodles"** on Corn Ton — descriptive (it's 16 cobs deep), or does a Ton pop into
-   16 of something directly?
-4. **★ The big one — what does D (leak) actually cost?** His D is cumulative RBE (a Corn Cob
-   = 616). With 100 lives, one unpopped cob leaking = instant loss. Options: **(a)** raise
-   lives way up, BTD-style (hundreds/thousands); **(b)** a leaked mob only costs a small
-   *body* value and its children still spill out and have to be dealt with; **(c)** D is just
-   the informational RBE and real leak cost is smaller. Which model do you want?
-5. **Rarity (○/◇/★/★★)** — does rarity drive how often a mob shows up (spawn weighting in
-   freeplay), or is it just a label for now?
-6. **Rainbow & Super Hard immunities** — any? (BTD: none — just fast/tanky.)
-7. **Quick Cob = camo?** In BTD the DDT is camo (only some towers see it). We don't have
-   camo/detection yet — treat Quick Cob as just a fast low-HP cob for now, add camo with a
-   detection upgrade later? (This is the "powers stack" hook from the tower sheet.)
-8. **Round system** — copy the BTD6 **structure** with our own numbers (my rec), or do you
-   want me to reproduce BTD6's exact per-round counts?
-9. **Butter economy at 100 rounds** — the current economy is tuned for 20 waves. A 100-round
-   game needs a re-tuned butter curve (and probably the Butter Bank/Boost churn paths become
-   essential). I'll handle that in balancing once the roster's locked — just flagging it.
+1. **Corn Kernel HP = 1.** Follow Bloons — every basic kernel is one layer, one hit. (Was 2.)
+2. **Pop tree = the standard Bloons lineage** (§2). All the inferred edges are confirmed:
+   Corn Cob → 4 Super Hard, Super Hard → 2 Rainbow, Rainbow → 2 Zebra, Zebra → 1 Black + 1
+   White, Quick Cob → 4 Super Hard, **Big Corn of Doom → 2 Corn Ton + 3 Quick Cob**.
+3. **"16 corn nodles"** = descriptive (a Corn Ton is 16 cobs deep: 4 Bunch × 4 Cob). Not a
+   separate spawn.
+4. **★ Leak = instant game over, Bloons-style.** A mob that reaches the bowl costs its full D
+   in lives; with 100 lives, letting a big cob through ends the run. *(Filed for next update: a
+   Butter Churn upgrade that grants lives back — see the header note.)* So `leak = D` per mob.
+5. **Rarity = a label, all set to 1.** No spawn-weighting from rarity; what appears each round
+   is driven by the round system (like Bloons), not random rolls.
+6. **Rainbow & Super Hard have no immunities** — just fast / high-HP (like Bloons rainbow +
+   ceramic).
+7. **Quick Cob = fast-only for now.** A fast, low-HP cob. Camo (BTD's DDT trait) comes later
+   as a tower *detection* power — the stacking-upgrade hook from the tower sheet.
+8. **Round system = the BTD6 *structure*, our own numbers, and it FLOWS.** Boss rounds fixed
+   (Corn Cob R40, Corn Bunch R60, Corn Ton R80, Big Corn of Doom R100); the rounds in between
+   are **procedurally generated** so nobody hand-authors 100 rounds — a generator ramps mob
+   types and counts in smoothly as the round climbs (see §4). Not a byte-copy of NK's table.
+9. **Butter economy for 100 rounds** — mine to tune during balancing once the roster's in;
+   the Butter Bank/Boost churn paths likely become essential. (Not a blocker.)
 
-Once ratified, this becomes `enemy-design-v2.md` (canonical) and supersedes the 20-wave
-chart; I'll build the roster + the 100-round table + new art per new mob, oracle-gated.
+**Cleared to build.** This supersedes the 20-wave chart. Build order: roster + immunities
+(laser live, freeze/bomb latent) → the procedural 100-round generator (boss rounds pinned) →
+distinct art per new mob (Quick Cob + Big Corn of Doom take **his drawings as the reference**,
+per his request) → oracle "winnable to R100" → balance the butter curve.
