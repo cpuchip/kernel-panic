@@ -3,7 +3,7 @@
 // tower/kernel/round is authoring, not engine work.
 
 import { mulberry32 } from '../rng.ts'
-import type { KernelType, KernelTypeId, RoundDef, TowerType } from './types.ts'
+import type { BombType, KernelType, KernelTypeId, RoundDef, TowerType } from './types.ts'
 
 // The map is now data in maps.ts (Michael's son drew four; the classic kitchen
 // is the default). PATH is re-exported for the oracle's path tests.
@@ -128,17 +128,93 @@ export const TOWERS: Record<string, TowerType> = {
         { name: 'Savings Churn', cost: 1500, interest: 0.10 },
         { name: 'Compound Churn', cost: 2500, interest: 0.20 },
       ] },
-      // Path 3 — Butter Boost: an aura that tips nearby attacking towers extra butter per pop.
-      { key: 'boost', label: 'Butter Boost', tiers: [
-        { name: 'Buttery Aura', cost: 1200, boostRadius: 90, boostPerPop: 1 },
-        { name: 'Golden Aura', cost: 2000, boostRadius: 115, boostPerPop: 2 },
-        { name: 'Butter Storm', cost: 3500, boostRadius: 140, boostPerPop: 3 },
+      // Path 3 — Popcorn: pops out a few LIVES each round you clear (his "one
+      // popcorn each round" note; popcorn = life). Replaces the old Butter aura.
+      { key: 'popcorn', label: 'Popcorn', tiers: [
+        { name: 'Popper', cost: 1200, livesPerRound: 1 },
+        { name: 'Big Popper', cost: 2000, livesPerRound: 2 },
+        { name: 'Popcorn Storm', cost: 3500, livesPerRound: 3 },
+      ] },
+    ],
+  },
+  // ── Freeze Ray — stops kernels cold (no damage). Can't touch cobs until Mega,
+  // and never the freeze-resistant (White/Zebra/Purple = RTF) or Big Corn of Doom.
+  freeze: {
+    id: 'freeze', name: 'Freeze Ray', kind: 'freeze',
+    cost: 750, dph: 0, sps: 0.5, pierce: 10, range: 150, freezeSec: 2, color: '#7fd6ff', maxPaths: 2,
+    blurb: 'Freezes up to 10 kernels solid for a few seconds. No damage — it buys time. Cobs shrug it off until Mega.',
+    paths: [
+      { key: 'freezeStr', label: 'Freeze', tiers: [
+        { name: 'Strong Freeze', cost: 750, freezeSec: 4 },
+        { name: 'Mega Freeze', cost: 1500, freezeSec: 8, mega: true },
+      ] },
+      { key: 'rate', label: 'Fire Rate', tiers: [
+        { name: 'Fast Freeze', cost: 750, sps: 1 },
+        { name: 'Super-Fast Freeze', cost: 1000, sps: 2 },
+      ] },
+      { key: 'range', label: 'Range', tiers: [
+        { name: 'Long Ray', cost: 750, rangeMul: 1.25 },
+        { name: 'Very Long Ray', cost: 1000, rangeMul: 1.5 },
+      ] },
+    ],
+  },
+  // ── Butter Turret — sticks butter on kernels, slowing them 50%. Top tier also
+  // butters cobs (never BCD); the Poison path adds a damage-over-time drip.
+  butter: {
+    id: 'butter', name: 'Butter Turret', kind: 'butter',
+    cost: 750, dph: 0, sps: 1, pierce: 1, range: 120, slowSec: 2, color: '#ffd98a', maxPaths: 2,
+    blurb: 'Butters kernels so they crawl at half speed. Sharp/Poison butter drips damage while it sticks.',
+    paths: [
+      { key: 'slowTime', label: 'Butter Time', tiers: [
+        { name: 'More Stick', cost: 700, slowSec: 4 },
+        { name: 'Big Stick', cost: 1250, slowSec: 8, affectsCobs: true },
+      ] },
+      { key: 'rate', label: 'Fire Rate', tiers: [
+        { name: 'Quick Shot', cost: 750, sps: 2 },
+        { name: 'Quicker Shot', cost: 1000, sps: 4 },
+      ] },
+      { key: 'poison', label: 'Poison', tiers: [
+        { name: 'Sharp Butter', cost: 750, pierce: 5 },
+        { name: 'Poison Butter', cost: 1500, pierce: 5, poisonDps: 1 },
+      ] },
+    ],
+  },
+  // ── Popcorn Machine — sucks kernels off the track and bakes them into LIVES
+  // (100 kernels → 1 popcorn = 1 life). Defense + life economy in one. Top
+  // storage tier can even swallow a cob.
+  popcorn: {
+    id: 'popcorn', name: 'Popcorn Machine', kind: 'popcorn',
+    cost: 2000, dph: 0, sps: 1, pierce: 0, range: 90, capacity: 5, kernelsPerPopcorn: 100, popcornYield: 1, color: '#f6e7c4', maxPaths: 2,
+    blurb: 'Sucks kernels off the track and pops them into lives (100 kernels → 1 life). Never leaks what it eats.',
+    paths: [
+      { key: 'store', label: 'Storage', tiers: [
+        { name: 'Bigger Machine', cost: 1000, capacity: 10 },
+        { name: 'Super Big Machine', cost: 2000, capacity: 20, affectsCobs: true },
+      ] },
+      { key: 'eff', label: 'Freshness', tiers: [
+        { name: 'Fresher Machine', cost: 2000, kernelsPerPopcorn: 75 },
+        { name: 'Super Fresh Machine', cost: 2000, kernelsPerPopcorn: 75, popcornYield: 2 },
+      ] },
+      { key: 'range', label: 'Range', tiers: [
+        { name: 'Big Suck', cost: 1000, rangeMul: 1.25 },
+        { name: 'Super Suck', cost: 2000, rangeMul: 1.3 },
       ] },
     ],
   },
 }
 
-export const TOWER_ORDER = ['fire', 'microwave', 'laser', 'churn'] as const
+// The five Butter Bomb sizes you can drop on the track (his sheet: 50→1000).
+export const BOMBS: BombType[] = [
+  { name: 'Butter Bomb', cost: 50, dmg: 25 },
+  { name: 'Big Bomb', cost: 100, dmg: 50 },
+  { name: 'Bigger Bomb', cost: 250, dmg: 125 },
+  { name: 'Even Bigger Bomb', cost: 500, dmg: 250 },
+  { name: 'Biggest Bomb', cost: 1000, dmg: 500 },
+]
+export const BOMB_RADIUS = 45 // AoE reach when a bomb goes off
+export const COB_UNITS = 20 // how many "kernels" a swallowed cob banks in the Popcorn Machine
+
+export const TOWER_ORDER = ['fire', 'microwave', 'laser', 'freeze', 'butter', 'churn', 'popcorn'] as const
 
 // ── The round system — a procedural 100-round curve (docs/enemy-design-v2.md) ──
 // Boss rounds are PINNED (Corn Cob 40, Corn Bunch 60, Corn Ton 80, Big Corn of
@@ -275,9 +351,11 @@ function freePlayRound(r: number, seed: number): RoundDef {
   return { groups, bonus: roundBonus(CAMPAIGN_ROUNDS) + over * 220 }
 }
 
-/** Effective dph/sps/income given the tiers bought across all paths (each stat
- * lives in one path; a later tier of that path overrides the earlier value). */
-export function effStat(t: TowerType, levels: number[], key: 'dph' | 'sps' | 'income'): number {
+/** Effective absolute stat given the tiers bought across all paths (each stat
+ * lives in one path; a later tier of that path overrides the earlier value).
+ * Starts from the tower's base value for that key. */
+type EffKey = 'dph' | 'sps' | 'income' | 'pierce' | 'freezeSec' | 'slowSec' | 'capacity' | 'kernelsPerPopcorn' | 'popcornYield'
+export function effStat(t: TowerType, levels: number[], key: EffKey): number {
   let v = (t[key] as number | undefined) ?? 0
   t.paths.forEach((p, i) => {
     for (let tier = 0; tier < (levels[i] ?? 0); tier++) {
@@ -286,6 +364,14 @@ export function effStat(t: TowerType, levels: number[], key: 'dph' | 'sps' | 'in
     }
   })
   return v
+}
+
+/** True if any bought tier flips a boolean tier flag (mega / affectsCobs). */
+export function towerFlag(t: TowerType, levels: number[], key: 'mega' | 'affectsCobs'): boolean {
+  return t.paths.some((p, i) => {
+    for (let tier = 0; tier < (levels[i] ?? 0); tier++) if (p.tiers[tier][key]) return true
+    return false
+  })
 }
 
 /** Effective range = base × the highest range-tier multiplier bought. */
@@ -304,8 +390,9 @@ export function towerIncome(t: TowerType, levels: number[]): number {
 }
 
 /** Last value of an arbitrary tier field across bought tiers (0 if unbought).
- * Used for the Butter Churn's Bank (interest) and Boost (aura) paths. */
-export function tierValue(t: TowerType, levels: number[], key: 'interest' | 'boostRadius' | 'boostPerPop'): number {
+ * Used for tier-only stats with no tower base: Bank interest, Poison drip, and
+ * the Churn's Popcorn (lives/round) path. */
+export function tierValue(t: TowerType, levels: number[], key: 'interest' | 'poisonDps' | 'livesPerRound'): number {
   let v = 0
   t.paths.forEach((p, i) => {
     for (let tier = 0; tier < (levels[i] ?? 0); tier++) {

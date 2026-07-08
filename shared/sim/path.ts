@@ -50,3 +50,27 @@ export function distToPath(path: Path, px: number, py: number): number {
   }
   return best
 }
+
+/** Arc-distance along the path of the point closest to (px,py) — the `d` you'd
+ * pass back to pointAt. Butter Bombs sit ON the track, so a tap on the board
+ * snaps to this distance. */
+export function nearestDistAlong(path: Path, px: number, py: number): number {
+  let best = Infinity
+  let bestD = 0
+  let acc = 0
+  for (let i = 0; i < path.segLen.length; i++) {
+    const a = path.points[i]
+    const b = path.points[i + 1]
+    const l = path.segLen[i] || 1
+    const t = Math.max(0, Math.min(1, ((px - a.x) * (b.x - a.x) + (py - a.y) * (b.y - a.y)) / (l * l)))
+    const cx = a.x + (b.x - a.x) * t
+    const cy = a.y + (b.y - a.y) * t
+    const dd = (px - cx) ** 2 + (py - cy) ** 2
+    if (dd < best) {
+      best = dd
+      bestD = acc + t * l
+    }
+    acc += l
+  }
+  return bestD
+}

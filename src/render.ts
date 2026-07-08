@@ -2,7 +2,7 @@
 // Phase 0 is shapes (art comes in Phase 1 via the asset harness). Kernels =
 // kernels, cobs = bosses, towers by kind, plus transient FX from sim events.
 
-import { KERNELS, TOWERS, effRange, tierValue } from '../shared/sim/content.ts'
+import { KERNELS, TOWERS, effRange } from '../shared/sim/content.ts'
 import { MAPS, DEFAULT_MAP } from '../shared/sim/maps.ts'
 import type { Path } from '../shared/sim/path.ts'
 import { kernelHeading, kernelWorld, tileBuildable, tileCenter } from '../shared/sim/sim.ts'
@@ -179,23 +179,14 @@ function towerBody(ctx: CanvasRenderingContext2D, t: Tower): void {
 function drawTowers(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
   for (const t of s.towers) {
     const def = TOWERS[t.type]
-    if (v.selectedId === t.id) {
-      if (def.kind !== 'econ') {
-        const range = effRange(def, t.pathLevels)
-        ctx.fillStyle = 'rgba(255,209,102,0.08)'
-        ctx.strokeStyle = 'rgba(255,209,102,0.4)'
-        ctx.lineWidth = 1.5
-        ctx.beginPath(); ctx.arc(t.x, t.y, range, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-      } else {
-        // Butter Churn: show the Butter Boost aura (if that path is bought).
-        const boost = tierValue(def, t.pathLevels, 'boostRadius')
-        if (boost > 0) {
-          ctx.fillStyle = 'rgba(242,210,80,0.10)'
-          ctx.strokeStyle = 'rgba(242,210,80,0.45)'
-          ctx.lineWidth = 1.5
-          ctx.beginPath(); ctx.arc(t.x, t.y, boost, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-        }
-      }
+    if (v.selectedId === t.id && def.kind !== 'econ') {
+      // Every tower that reaches out (attack / freeze / butter / popcorn suck)
+      // shows its range; the Butter Churn has no range, so nothing to draw.
+      const range = effRange(def, t.pathLevels)
+      ctx.fillStyle = 'rgba(255,209,102,0.08)'
+      ctx.strokeStyle = 'rgba(255,209,102,0.4)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath(); ctx.arc(t.x, t.y, range, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
     }
     towerBody(ctx, t)
   }

@@ -8,9 +8,9 @@
 // MP correctness check).
 
 import { mulberry32, type Rng } from '../rng.ts'
-import { CAMPAIGN_ROUNDS, KERNELS, PATH, TOWERS, effRange, effStat, getRound, tierValue, towerIncome } from './content.ts'
+import { BOMBS, CAMPAIGN_ROUNDS, KERNELS, PATH, TOWERS, effRange, effStat, getRound, tierValue, towerFlag, towerIncome } from './content.ts'
 import { MAPS, MAP_ORDER } from './maps.ts'
-import { pointAt, distToPath } from './path.ts'
+import { pointAt, distToPath, nearestDistAlong } from './path.ts'
 import { apply, earlyBonus, newGame, roundHpMul, roundSpeedMul, tick, tileBuildable, tileCenter, kernelWorld, RuleError } from './sim.ts'
 import { EARLY_WINDOW_TICKS, START_LIVES, WORLD_H, WORLD_W, TILE, type Command, type SimState } from './types.ts'
 
@@ -60,6 +60,24 @@ function tilesNearPath(): [number, number][] {
 }
 const NEAR = tilesNearPath()
 
+/** The buildable tile nearest a chosen distance along the path — so a support
+ * tower sits beside a known injection point with plenty of runway ahead. */
+function tileNearDist(targetD: number): { tile: [number, number]; worldDist: number } {
+  const tp = pointAt(PATH, targetD)
+  const s0 = newGame()
+  let best: [number, number] = NEAR[0]
+  let bestD = Infinity
+  for (let cy = 0; cy < ROWS; cy++) {
+    for (let cx = 0; cx < COLS; cx++) {
+      if (!tileBuildable(s0, cx, cy)) continue
+      const c = tileCenter(cx, cy)
+      const d = Math.hypot(c.x - tp.x, c.y - tp.y)
+      if (d < bestD) { bestD = d; best = [cx, cy] }
+    }
+  }
+  return { tile: best, worldDist: bestD }
+}
+
 /** Serialize the parts of state that must be reproducible. */
 function snap(s: SimState): string {
   return JSON.stringify({
@@ -73,6 +91,8 @@ function snap(s: SimState): string {
     towers: s.towers,
     kernels: s.kernels,
     projectiles: s.projectiles,
+    bombs: s.bombs,
+    kernelsEaten: s.kernelsEaten,
   })
 }
 
@@ -496,8 +516,8 @@ console.log('maps')
   ok(sBad.mapId === 'classic', 'unknown map id falls back to classic')
 }
 
-// ── 11. Butter Churn crosspath: Bank interest + Boost aura ───────────────────
-console.log('churn bank + boost')
+// ── 11. Butter Churn crosspath: Bank interest + Popcorn (lives/round) ────────
+console.log('churn bank + popcorn')
 {
   const churn = TOWERS.churn
   ok(churn.maxPaths === 2 && churn.paths.length === 3, 'churn has 3 paths, pick 2')
@@ -524,33 +544,211 @@ console.log('churn bank + boost')
   const baseIncome = towerIncome(churn, s.towers[0].pathLevels) // flat churn base (250)
   ok(s.butter === before + def.bonus + baseIncome + Math.floor(before * 0.05), 'round clear credits 5% interest on held butter')
 
-  // Butter Boost tips extra butter per pop inside the aura
+  // Popcorn path pops out lives each round you clear (popcorn = life)
   const s2 = newGame()
   const rng2 = mulberry32(6)
   s2.butter = 100000
   apply(s2, { t: 'place', tower: 'churn', cx: NEAR[0][0], cy: NEAR[0][1] }, rng2)
-  const boostIdx = churn.paths.findIndex((p) => p.key === 'boost')
-  apply(s2, { t: 'upgrade', id: s2.towers[0].id, path: boostIdx }, rng2) // Buttery Aura: +1/pop, r90
-  ok(tierValue(churn, s2.towers[0].pathLevels, 'boostPerPop') === 1, 'boost path sets +1 butter/pop')
-  // a poppable dying near the churn earns bounty(1) + boost(1). Find the path
-  // distance whose point is closest to the churn (well inside the r90 aura).
-  const churnTower = s2.towers[0]
-  const path = MAPS[s2.mapId].path
-  let nearDist = 0
-  let nearBest = Infinity
-  for (let d = 0; d <= path.total; d += 2) {
-    const p = pointAt(path, d)
-    const dd = Math.hypot(p.x - churnTower.x, p.y - churnTower.y)
-    if (dd < nearBest) { nearBest = dd; nearDist = d }
-  }
-  ok(nearBest <= 90, 'churn aura reaches its nearest path point')
-  s2.kernels = [{ id: s2.nextId++, type: 'poppable', dist: nearDist, hp: 0 }]
-  s2.butter = 0
+  const popIdx = churn.paths.findIndex((p) => p.key === 'popcorn')
+  apply(s2, { t: 'upgrade', id: s2.towers[0].id, path: popIdx }, rng2) // Popper: +1 life/round
+  ok(tierValue(churn, s2.towers[0].pathLevels, 'livesPerRound') === 1, 'popcorn path sets +1 life/round')
+  s2.round = 2
   s2.phase = 'round'
   s2.roundActive = true
-  s2.spawnQueue = [{ type: 'poppable', atTick: s2.tick + 999 }] // keep the round from ending
-  tick(s2, rng2) // the death pass credits bounty(1) + boost(1)
-  ok(s2.butter >= 2, 'pop inside the aura pays bounty + boost')
+  s2.spawnQueue = []
+  s2.kernels = []
+  const livesBefore = s2.lives
+  tick(s2, rng2) // checkRoundEnd credits the round's lives
+  ok(s2.lives === livesBefore + 1, 'clearing a round with Popper adds 1 life')
+}
+
+// ── 12. Freeze Ray: freezes movers, respects RTF + cob rules ─────────────────
+console.log('freeze ray')
+{
+  const D = PATH.total * 0.3
+  const [cx, cy] = tileNearDist(D).tile
+  function freezeCheck(kernelType: string, mega: boolean): { frozen: boolean; moved: number } {
+    const s = newGame()
+    s.butter = 100000
+    const rng = mulberry32(1)
+    apply(s, { t: 'place', tower: 'freeze', cx, cy }, rng)
+    const tw = s.towers[0]
+    if (mega) {
+      const fi = TOWERS.freeze.paths.findIndex((p) => p.key === 'freezeStr')
+      apply(s, { t: 'upgrade', id: tw.id, path: fi }, rng)
+      apply(s, { t: 'upgrade', id: tw.id, path: fi }, rng) // → Mega Freeze
+    }
+    s.phase = 'round'
+    s.roundActive = true
+    s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }]
+    s.kernels = [{ id: s.nextId++, type: kernelType as SimState['kernels'][0]['type'], dist: D, hp: KERNELS[kernelType as 'poppable'].hp }]
+    for (let i = 0; i < 12; i++) tick(s, rng)
+    const k = s.kernels.find((x) => x.type === kernelType)
+    return { frozen: !!(k && (k.freeze ?? 0) > 0), moved: k ? k.dist - D : 999 }
+  }
+  const plain = freezeCheck('poppable', false)
+  ok(plain.frozen, 'freeze ray freezes a plain kernel')
+  const whiteK = freezeCheck('white', false)
+  ok(!whiteK.frozen, 'a White Kernel (RTF) never freezes')
+  ok(whiteK.moved > plain.moved + 5, 'a frozen kernel barely moves; the RTF kernel walks on')
+  ok(!freezeCheck('cob', false).frozen, 'base freeze cannot touch a cob')
+  ok(freezeCheck('cob', true).frozen, 'Mega Freeze freezes a cob')
+  ok(!freezeCheck('bigcorn', true).frozen, 'even Mega Freeze cannot freeze the Big Corn of Doom')
+}
+
+// ── 13. Butter Turret: slows kernels, and Poison butter drips damage ─────────
+console.log('butter turret')
+{
+  const D = PATH.total * 0.3
+  const [cx, cy] = tileNearDist(D).tile
+  function run(withButter: boolean, poison: boolean): { moved: number; hp: number; slowed: boolean } {
+    const s = newGame()
+    s.butter = 100000
+    const rng = mulberry32(2)
+    if (withButter) {
+      apply(s, { t: 'place', tower: 'butter', cx, cy }, rng)
+      if (poison) {
+        const pi = TOWERS.butter.paths.findIndex((p) => p.key === 'poison')
+        apply(s, { t: 'upgrade', id: s.towers[0].id, path: pi }, rng)
+        apply(s, { t: 'upgrade', id: s.towers[0].id, path: pi }, rng) // → Poison Butter
+      }
+    }
+    s.phase = 'round'
+    s.roundActive = true
+    s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }]
+    s.kernels = [{ id: s.nextId++, type: 'kettle', dist: D, hp: 50 }] // sturdy, so it survives to be measured
+    for (let i = 0; i < 20; i++) tick(s, rng)
+    const k = s.kernels.find((x) => x.type === 'kettle')
+    return { moved: k ? k.dist - D : 999, hp: k ? k.hp : 0, slowed: !!(k && (k.slow ?? 0) > 0) }
+  }
+  const free = run(false, false)
+  const slowed = run(true, false)
+  ok(slowed.slowed, 'butter turret sticks butter (slow) on a kernel')
+  ok(slowed.moved < free.moved, 'a buttered kernel advances slower than a free one')
+  ok(run(true, true).hp < 50, 'Poison Butter drips damage over time (hp falls with no attacker)')
+}
+
+// ── 14. Butter Bomb: 1-use track mine; Black kernels shrug it off ────────────
+console.log('butter bomb')
+{
+  const bombDist = PATH.total * 0.5
+  const s = newGame()
+  const rng = mulberry32(3)
+  s.butter = 100000
+  const butterBefore = s.butter
+  apply(s, { t: 'placeBomb', size: 4, dist: bombDist }, rng) // Biggest Bomb, 500 dmg
+  ok(s.bombs.length === 1, 'a placed bomb sits on the track')
+  ok(butterBefore - s.butter === BOMBS[4].cost, 'placing a bomb costs its butter')
+  s.phase = 'round'
+  s.roundActive = true
+  s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }]
+  s.kernels = [{ id: s.nextId++, type: 'superhard', dist: bombDist - 20, hp: 10 }]
+  for (let i = 0; i < 40 && s.bombs.length > 0; i++) tick(s, rng)
+  ok(s.bombs.length === 0, 'the bomb detonated and was consumed (1 use)')
+  ok(s.popped > 0, 'the bomb popped the kernel that stepped on it')
+  // Black Kernel is bomb-proof
+  const s2 = newGame()
+  const rng2 = mulberry32(4)
+  s2.butter = 100000
+  apply(s2, { t: 'placeBomb', size: 4, dist: bombDist }, rng2)
+  s2.phase = 'round'
+  s2.roundActive = true
+  s2.spawnQueue = [{ type: 'poppable', atTick: s2.tick + 9999 }]
+  s2.kernels = [{ id: s2.nextId++, type: 'black', dist: bombDist - 2, hp: 1 }]
+  tick(s2, rng2) // black reaches the bomb → it triggers but deals no damage to black
+  const bk = s2.kernels.find((x) => x.type === 'black')
+  ok(!!bk && bk.hp === 1, 'a Black Kernel shrugs off the bomb (resistBomb)')
+  ok(s2.bombs.length === 0, 'the bomb is still spent even when it hits only bomb-proof kernels')
+  // rule checks
+  throws(() => apply(newGame(), { t: 'placeBomb', size: 4, dist: PATH.total + 50 }, mulberry32(1)), 'cannot place a bomb off the track')
+  const poor = newGame()
+  poor.butter = 10
+  throws(() => apply(poor, { t: 'placeBomb', size: 4, dist: bombDist }, mulberry32(1)), 'cannot place a bomb without butter')
+}
+
+// ── 15. Popcorn Machine: eats kernels off the track, banks them into lives ───
+console.log('popcorn machine')
+{
+  const D = PATH.total * 0.3
+  const [cx, cy] = tileNearDist(D).tile
+  const s = newGame()
+  const rng = mulberry32(5)
+  s.butter = 100000
+  apply(s, { t: 'place', tower: 'popcorn', cx, cy }, rng)
+  s.phase = 'round'
+  s.roundActive = true
+  s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }]
+  for (let i = 0; i < 8; i++) s.kernels.push({ id: s.nextId++, type: 'poppable', dist: D + i * 2, hp: 1 })
+  const before = s.kernels.length
+  const butterBefore = s.butter
+  tick(s, rng) // one activation eats up to capacity (5)
+  ok(s.kernels.length < before, 'the popcorn machine sucks kernels off the track')
+  ok(s.kernelsEaten > 0, 'eaten kernels are banked toward popcorn')
+  ok(s.butter === butterBefore, 'sucked kernels pay NO bounty (they become lives, not butter)')
+  // crossing the 100-kernel threshold pops a life
+  const s2 = newGame()
+  const rng2 = mulberry32(5)
+  s2.butter = 100000
+  apply(s2, { t: 'place', tower: 'popcorn', cx, cy }, rng2)
+  s2.kernelsEaten = 99
+  s2.phase = 'round'
+  s2.roundActive = true
+  s2.spawnQueue = [{ type: 'poppable', atTick: s2.tick + 9999 }]
+  s2.kernels = [{ id: s2.nextId++, type: 'poppable', dist: D, hp: 1 }]
+  const lifeBefore = s2.lives
+  tick(s2, rng2) // eats 1 → 100 → +1 life
+  ok(s2.lives === lifeBefore + 1, 'a full batch (100 kernels) pops into a life')
+}
+
+// ── 16. New-tower structure + determinism with the new mechanics ─────────────
+console.log('new towers structure')
+{
+  for (const id of ['freeze', 'butter', 'popcorn']) {
+    const def = TOWERS[id]
+    ok(!!def && def.paths.length === 3 && def.maxPaths === 2, `${id}: 3 paths, pick 2`)
+  }
+  const fdef = TOWERS.freeze
+  const fi = fdef.paths.findIndex((p) => p.key === 'freezeStr')
+  const base = fdef.paths.map(() => 0)
+  ok(!towerFlag(fdef, base, 'mega'), 'freeze is not Mega unbought')
+  ok(effStat(fdef, base, 'freezeSec') === 2, 'base freeze duration 2s')
+  const megaLv = fdef.paths.map(() => 0)
+  megaLv[fi] = 2
+  ok(towerFlag(fdef, megaLv, 'mega') && effStat(fdef, megaLv, 'freezeSec') === 8, 'Mega Freeze: flag set, 8s duration')
+  ok(BOMBS.length === 5, 'five bomb sizes')
+  let asc = true
+  for (let i = 1; i < BOMBS.length; i++) if (BOMBS[i].cost <= BOMBS[i - 1].cost || BOMBS[i].dmg <= BOMBS[i - 1].dmg) asc = false
+  ok(asc, 'bombs get pricier and punchier by size')
+  const pdef = TOWERS.popcorn
+  const ei = pdef.paths.findIndex((p) => p.key === 'eff')
+  const pl = pdef.paths.map(() => 0)
+  ok(effStat(pdef, pl, 'kernelsPerPopcorn') === 100 && effStat(pdef, pl, 'popcornYield') === 1, 'base 100 kernels → 1 life')
+  pl[ei] = 2
+  ok(effStat(pdef, pl, 'kernelsPerPopcorn') === 75 && effStat(pdef, pl, 'popcornYield') === 2, 'Super Fresh: 75 kernels → 2 lives')
+
+  // determinism must still hold with freeze/butter/popcorn towers AND a bomb live
+  function playNew(seed: number): SimState {
+    const s = newGame()
+    const rng = mulberry32(seed)
+    s.butter = 100000
+    apply(s, { t: 'place', tower: 'freeze', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
+    apply(s, { t: 'place', tower: 'butter', cx: NEAR[2][0], cy: NEAR[2][1] }, rng)
+    apply(s, { t: 'place', tower: 'popcorn', cx: NEAR[4][0], cy: NEAR[4][1] }, rng)
+    apply(s, { t: 'place', tower: 'fire', cx: NEAR[6][0], cy: NEAR[6][1] }, rng)
+    apply(s, { t: 'placeBomb', size: 2, dist: PATH.total * 0.4 }, rng)
+    let g = 6000
+    while (s.phase !== 'lost' && s.round < 3 && g-- > 0) {
+      if (s.phase === 'build') apply(s, { t: 'startRound' }, rng)
+      tick(s, rng)
+    }
+    return s
+  }
+  ok(snap(playNew(21)) === snap(playNew(21)), 'freeze + butter + popcorn + a bomb stay deterministic')
+
+  // nearestDistAlong (the client uses it to snap a bomb tap to the track)
+  const dTarget = PATH.total * 0.42
+  const onPath = pointAt(PATH, dTarget)
+  ok(Math.abs(nearestDistAlong(PATH, onPath.x, onPath.y) - dTarget) < 2, 'nearestDistAlong recovers a point\'s distance on the path')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

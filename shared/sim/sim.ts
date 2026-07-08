@@ -4,7 +4,7 @@
 
 import { dist, pointSegDist } from '../vec.ts'
 import type { Rng } from '../rng.ts'
-import { CAMPAIGN_ROUNDS, KERNELS, TOWERS, activePaths, effRange, effStat, getRound, tierValue, towerIncome, towerSpent } from './content.ts'
+import { BOMBS, BOMB_RADIUS, COB_UNITS, CAMPAIGN_ROUNDS, KERNELS, TOWERS, activePaths, effRange, effStat, getRound, tierValue, towerFlag, towerIncome, towerSpent } from './content.ts'
 import { DEFAULT_MAP, MAPS } from './maps.ts'
 import { distToPath, pointAt, type Path } from './path.ts'
 import {
@@ -17,6 +17,7 @@ import {
   START_BUTTER,
   START_LIVES,
   TILE,
+  TPS,
   WORLD_H,
   WORLD_W,
   type Command,
@@ -74,6 +75,8 @@ export function newGame(seed = 1, mapId: string = DEFAULT_MAP): SimState {
     kernels: [],
     towers: [],
     projectiles: [],
+    bombs: [],
+    kernelsEaten: 0,
     nextId: 1,
     spawnQueue: [],
     roundActive: false,
@@ -120,6 +123,15 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
       s.butter -= def.cost
       const { x, y } = tileCenter(cmd.cx, cmd.cy)
       s.towers.push({ id: s.nextId++, type: def.id, x, y, cx: cmd.cx, cy: cmd.cy, cd: 0, target: 'first', pathLevels: def.paths.map(() => 0) })
+      return
+    }
+    case 'placeBomb': {
+      const b = BOMBS[cmd.size]
+      if (!b) fail('unknown bomb')
+      if (cmd.dist < 0 || cmd.dist > pathOf(s).total) fail('bomb must sit on the track')
+      if (s.butter < b.cost) fail('not enough butter')
+      s.butter -= b.cost
+      s.bombs.push({ id: s.nextId++, dist: cmd.dist, dmg: b.dmg, radius: BOMB_RADIUS, size: cmd.size })
       return
     }
     case 'upgrade': {
@@ -189,10 +201,28 @@ export function tick(s: SimState, rng: Rng): void {
 
   spawn(s)
   advanceKernels(s)
+  detonateBombs(s)
   fireTowers(s, rng)
   moveProjectiles(s)
   resolveDeaths(s)
   checkRoundEnd(s)
+}
+
+// ── Status-effect rules (Freeze Ray / Butter Turret) ─────────────────────────
+// Freeze: RTF kernels (resistFreeze) never freeze; cobs freeze only with a Mega
+// Freeze, and the Big Corn of Doom never freezes at all. Butter (slow): cobs
+// only stick with the Big Stick tier, and again never the Big Corn of Doom.
+function canFreeze(type: KernelTypeId, mega: boolean): boolean {
+  const kt = KERNELS[type]
+  if (kt.resistFreeze) return false
+  if (type === 'bigcorn') return false
+  if (kt.cobShape && !mega) return false
+  return true
+}
+function canSlow(type: KernelTypeId, affectsCobs: boolean): boolean {
+  if (type === 'bigcorn') return false
+  if (KERNELS[type].cobShape && !affectsCobs) return false
+  return true
 }
 
 /** Spawn a mob, applying the round's HP scaling (cob family only, round 20+). */
@@ -214,7 +244,23 @@ function advanceKernels(s: SimState): void {
   const speedMul = SPEED_SCALE * roundSpeedMul(activeRound(s))
   for (const k of s.kernels) {
     const kt = KERNELS[k.type]
-    k.dist += kt.speed * speedMul * DT
+    // poison drip (Butter Turret's Poison tier) — ticks even while frozen
+    if (k.poison && k.poison > 0) {
+      k.hp -= (k.poisonDps ?? 0) * DT
+      k.poison--
+    }
+    // frozen kernels hold still — they can still be shot, but they don't advance
+    if (k.freeze && k.freeze > 0) {
+      k.freeze--
+      survivors.push(k)
+      continue
+    }
+    let mul = speedMul
+    if (k.slow && k.slow > 0) {
+      mul *= 0.5 // buttered kernels crawl at half speed
+      k.slow--
+    }
+    k.dist += kt.speed * mul * DT
     if (k.dist >= path.total) {
       // leaked into the bowl
       s.lives -= kt.leak
@@ -235,6 +281,31 @@ function advanceKernels(s: SimState): void {
 
 function kernelPos(path: Path, k: Kernel): { x: number; y: number } {
   return pointAt(path, k.dist)
+}
+
+/** Butter Bombs: a placed bomb goes off the moment any kernel reaches its point,
+ * dealing AoE damage to every kernel nearby (Black/Zebra shrug it off), then it's
+ * spent. Kills flow through the normal death/child cascade in resolveDeaths. */
+function detonateBombs(s: SimState): void {
+  if (s.bombs.length === 0) return
+  const path = pathOf(s)
+  const remaining: typeof s.bombs = []
+  for (const bomb of s.bombs) {
+    const triggered = s.kernels.some((k) => k.dist >= bomb.dist)
+    if (!triggered) {
+      remaining.push(bomb)
+      continue
+    }
+    const bp = pointAt(path, bomb.dist)
+    for (const k of s.kernels) {
+      if (KERNELS[k.type].resistBomb) continue // Black/Zebra kernels are bomb-proof
+      const p = kernelPos(path, k)
+      if (dist(bp.x, bp.y, p.x, p.y) <= bomb.radius + KERNELS[k.type].radius) k.hp -= bomb.dmg
+    }
+    s.events.push({ t: 'bomb', x: bp.x, y: bp.y, r: bomb.radius })
+    // consumed (1 use) — not pushed to remaining
+  }
+  s.bombs = remaining
 }
 
 function pickTarget(s: SimState, path: Path, t: Tower, range: number): Kernel | null {
@@ -282,6 +353,91 @@ function fireTowers(s: SimState, _rng: Rng): void {
       for (const k of inRange) k.hp -= dmg
       t.cd = cooldown
       s.events.push({ t: 'pulse', x: t.x, y: t.y, r: range, kind: 'microwave' })
+      continue
+    }
+
+    if (def.kind === 'freeze') {
+      // Freeze the frontmost freezable kernels in range (up to pierce). No damage.
+      const isMega = towerFlag(def, t.pathLevels, 'mega')
+      const ftTicks = Math.round(effStat(def, t.pathLevels, 'freezeSec') * TPS)
+      const pierce = effStat(def, t.pathLevels, 'pierce')
+      const cand = s.kernels
+        .filter((k) => {
+          const p = kernelPos(path, k)
+          return dist(t.x, t.y, p.x, p.y) <= range && canFreeze(k.type, isMega)
+        })
+        .sort((a, b) => b.dist - a.dist)
+      if (cand.length === 0) continue // hold the ray ready
+      for (let i = 0; i < Math.min(pierce, cand.length); i++) cand[i].freeze = ftTicks
+      t.cd = cooldown
+      s.events.push({ t: 'freeze', x: t.x, y: t.y, r: range, kind: 'freeze' })
+      continue
+    }
+
+    if (def.kind === 'butter') {
+      // Butter the frontmost sluggable kernels in range (up to pierce): slow +
+      // maybe a poison drip. No direct damage (the poison is the only damage).
+      const affectsCobs = towerFlag(def, t.pathLevels, 'affectsCobs')
+      const btTicks = Math.round(effStat(def, t.pathLevels, 'slowSec') * TPS)
+      const pierce = effStat(def, t.pathLevels, 'pierce')
+      const poisonDps = tierValue(def, t.pathLevels, 'poisonDps')
+      const cand = s.kernels
+        .filter((k) => {
+          const p = kernelPos(path, k)
+          return dist(t.x, t.y, p.x, p.y) <= range && canSlow(k.type, affectsCobs)
+        })
+        .sort((a, b) => b.dist - a.dist)
+      if (cand.length === 0) continue
+      for (let i = 0; i < Math.min(pierce, cand.length); i++) {
+        cand[i].slow = btTicks
+        if (poisonDps > 0) {
+          cand[i].poison = btTicks
+          cand[i].poisonDps = poisonDps
+        }
+      }
+      t.cd = cooldown
+      s.events.push({ t: 'butter', x: t.x, y: t.y, r: range, kind: 'butter' })
+      continue
+    }
+
+    if (def.kind === 'popcorn') {
+      // Suck kernels off the track (up to capacity), bank them, and bake full
+      // batches into lives. Eaten kernels are gone — no bounty, no leak. The top
+      // storage tier can also swallow a single cob (never the Big Corn of Doom).
+      const capacity = effStat(def, t.pathLevels, 'capacity')
+      const perPop = effStat(def, t.pathLevels, 'kernelsPerPopcorn')
+      const yieldPer = effStat(def, t.pathLevels, 'popcornYield')
+      const canCob = towerFlag(def, t.pathLevels, 'affectsCobs')
+      const inR = s.kernels
+        .filter((k) => {
+          const p = kernelPos(path, k)
+          return dist(t.x, t.y, p.x, p.y) <= range
+        })
+        .sort((a, b) => b.dist - a.dist)
+      const eaten = new Set<number>()
+      let cnt = 0
+      for (const k of inR) {
+        if (cnt >= capacity) break
+        if (KERNELS[k.type].cobShape) continue // cobs handled below
+        eaten.add(k.id)
+        s.kernelsEaten += 1
+        cnt++
+      }
+      if (canCob) {
+        const cob = inR.find((k) => KERNELS[k.type].cobShape && k.type !== 'bigcorn' && !eaten.has(k.id))
+        if (cob) {
+          eaten.add(cob.id)
+          s.kernelsEaten += COB_UNITS
+        }
+      }
+      if (eaten.size === 0) continue // nothing in reach — stay ready
+      s.kernels = s.kernels.filter((k) => !eaten.has(k.id))
+      while (s.kernelsEaten >= perPop) {
+        s.kernelsEaten -= perPop
+        s.lives += yieldPer
+      }
+      t.cd = cooldown
+      s.events.push({ t: 'suck', x: t.x, y: t.y, r: range, kind: 'popcorn' })
       continue
     }
 
@@ -359,7 +515,7 @@ function resolveDeaths(s: SimState): void {
     }
     const kt = KERNELS[k.type]
     const p = kernelPos(path, k)
-    s.butter += kt.bounty + boostForPop(s, p) // Butter Boost aura tips extra per pop
+    s.butter += kt.bounty
     s.popped++
     s.events.push({ t: 'pop', x: p.x, y: p.y, kind: k.type, boss: kt.boss })
     if (kt.children) {
@@ -375,21 +531,6 @@ function resolveDeaths(s: SimState): void {
   s.kernels = survivors.concat(children)
 }
 
-/** Butter Boost: extra butter for a pop at p, summed over every churn whose
- * aura (boostRadius) covers the pop point. Higher tiers pay more per pop. */
-function boostForPop(s: SimState, p: { x: number; y: number }): number {
-  let extra = 0
-  for (const t of s.towers) {
-    const def = TOWERS[t.type]
-    if (def.kind !== 'econ') continue
-    const radius = tierValue(def, t.pathLevels, 'boostRadius')
-    if (radius > 0 && dist(t.x, t.y, p.x, p.y) <= radius) {
-      extra += tierValue(def, t.pathLevels, 'boostPerPop')
-    }
-  }
-  return extra
-}
-
 function checkRoundEnd(s: SimState): void {
   if (!s.roundActive) return
   if (s.spawnQueue.length === 0 && s.kernels.length === 0) {
@@ -403,6 +544,10 @@ function checkRoundEnd(s: SimState): void {
     let income = def.bonus + interest
     for (const t of s.towers) income += towerIncome(TOWERS[t.type], t.pathLevels)
     s.butter += income
+    // Butter Churn's Popcorn path pops out a few lives each round you clear.
+    let livesGain = 0
+    for (const t of s.towers) livesGain += tierValue(TOWERS[t.type], t.pathLevels, 'livesPerRound')
+    if (livesGain > 0) s.lives += livesGain
     s.projectiles = []
     s.roundActive = false
     s.round++

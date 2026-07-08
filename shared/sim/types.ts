@@ -80,14 +80,20 @@ export interface KernelType {
   children?: { type: KernelTypeId; count: number; spread: number }[]
 }
 
-export type TowerKind = 'dart' | 'pulse' | 'beam' | 'econ'
+// Tower kinds: dart/pulse/beam damage; econ (churn, no per-tick action);
+// freeze (stops kernels); butter (slows + can poison); popcorn (eats kernels
+// off the track and banks them into lives). Freeze/butter/popcorn are the son's
+// "Tower Update part 2" sheet.
+export type TowerKind = 'dart' | 'pulse' | 'beam' | 'econ' | 'freeze' | 'butter' | 'popcorn'
 export type TargetPolicy = 'first' | 'last' | 'strong' | 'close'
 
 // Crosspath upgrade trees (design by Michael's son): each attacking tower has
 // three paths — damage / fire-rate / range — and you may invest in at most
 // `maxPaths` of them (2). A tier sets the ABSOLUTE new value for its stat; range
 // tiers give a multiplier on the base range. Butter Churn has one deep path.
-export type PathKey = 'dmg' | 'rate' | 'range' | 'butter' | 'bank' | 'boost'
+export type PathKey =
+  | 'dmg' | 'rate' | 'range' | 'butter' | 'bank' | 'popcorn'
+  | 'freezeStr' | 'slowTime' | 'poison' | 'store' | 'eff'
 
 export interface TowerTier {
   name: string
@@ -97,8 +103,16 @@ export interface TowerTier {
   rangeMul?: number // × base range
   income?: number // butter per round (econ)
   interest?: number // Butter Bank: fraction of held butter earned each round clear
-  boostRadius?: number // Butter Boost: aura radius (world units)
-  boostPerPop?: number // Butter Boost: extra butter per pop inside the aura
+  pierce?: number // mobs hit per shot (Butter Turret's Sharp/Poison path)
+  freezeSec?: number // Freeze Ray: seconds a hit kernel is frozen (Ft)
+  slowSec?: number // Butter Turret: seconds a hit kernel is slowed (Bt)
+  poisonDps?: number // Butter Turret's Poison tier: damage/sec while buttered
+  mega?: boolean // Freeze Ray's Mega tier: can freeze cobs (all but RTF and BCD)
+  affectsCobs?: boolean // Butter/Popcorn top tier: works on cobs too (never BCD)
+  capacity?: number // Popcorn Machine: kernels eaten per activation (KS)
+  kernelsPerPopcorn?: number // Popcorn Machine: kernels banked per popcorn (→ life)
+  popcornYield?: number // Popcorn Machine: lives granted per conversion
+  livesPerRound?: number // Butter Churn's Popcorn path: lives gained each round clear
 }
 
 export interface TowerPath {
@@ -117,12 +131,26 @@ export interface TowerType {
   pierce: number // mobs hit per shot (999 = "all in the line/ring")
   range: number // base range (world units)
   income?: number // econ base butter per round
+  freezeSec?: number // Freeze Ray base freeze duration (Ft)
+  slowSec?: number // Butter Turret base slow duration (Bt)
+  capacity?: number // Popcorn Machine base kernels-eaten per activation (KS)
+  kernelsPerPopcorn?: number // Popcorn Machine base kernels per popcorn (100)
+  popcornYield?: number // Popcorn Machine base lives per conversion (1)
   color: string
   projSpeed?: number // dart
   beamWidth?: number // beam
   blurb: string
   maxPaths: number // how many of the paths you may invest in
   paths: TowerPath[]
+}
+
+// Butter Bomb — a consumable placed ON the track; detonates on the first kernel
+// to reach it, dealing AoE damage, then it's gone (1 use). Five sizes you buy
+// à la carte (the son's sheet). Black/Zebra kernels (resistBomb) shrug it off.
+export interface BombType {
+  name: string
+  cost: number
+  dmg: number
 }
 
 export interface SpawnGroup {
@@ -144,6 +172,19 @@ export interface Kernel {
   type: KernelTypeId
   dist: number
   hp: number
+  freeze?: number // ticks of freeze remaining (no movement while > 0)
+  slow?: number // ticks of butter-slow remaining (speed ×0.5 while > 0)
+  poison?: number // ticks of poison remaining (takes poisonDps/tick while > 0)
+  poisonDps?: number // damage per second applied while poisoned
+}
+
+/** A placed Butter Bomb sitting on the track (world position = pointAt(dist)). */
+export interface Bomb {
+  id: number
+  dist: number // arc-distance along the path where it sits
+  dmg: number
+  radius: number // AoE radius (world units)
+  size: number // index into content BOMBS (for render scale)
 }
 
 export interface Tower {
@@ -172,7 +213,7 @@ export interface Projectile {
 export type Phase = 'build' | 'round' | 'lost'
 
 export interface SimEvent {
-  t: 'pop' | 'leak' | 'fire' | 'pulse' | 'beam' | 'roundClear' | 'bossIn' | 'lifeLoss' | 'campaignClear'
+  t: 'pop' | 'leak' | 'fire' | 'pulse' | 'beam' | 'freeze' | 'butter' | 'bomb' | 'suck' | 'roundClear' | 'bossIn' | 'lifeLoss' | 'campaignClear'
   x?: number
   y?: number
   tx?: number
@@ -194,6 +235,8 @@ export interface SimState {
   kernels: Kernel[]
   towers: Tower[]
   projectiles: Projectile[]
+  bombs: Bomb[] // placed Butter Bombs waiting on the track
+  kernelsEaten: number // running bank in the Popcorn Machine (→ lives at threshold)
   nextId: number
   spawnQueue: { type: KernelTypeId; atTick: number }[]
   roundActive: boolean
@@ -205,6 +248,7 @@ export interface SimState {
 
 export type Command =
   | { t: 'place'; tower: string; cx: number; cy: number }
+  | { t: 'placeBomb'; size: number; dist: number } // drop a Butter Bomb on the track
   | { t: 'upgrade'; id: number; path: number }
   | { t: 'sell'; id: number }
   | { t: 'target'; id: number; policy: TargetPolicy }
