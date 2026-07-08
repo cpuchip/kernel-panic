@@ -85,7 +85,8 @@ function snap(s: SimState): string {
     phase: s.phase,
     round: s.round,
     lives: s.lives,
-    butter: s.butter,
+    players: s.players,
+    splitPtr: s.splitPtr,
     popped: s.popped,
     leaked: s.leaked,
     towers: s.towers,
@@ -102,7 +103,7 @@ function snap(s: SimState): string {
  * about economy (they're testing that towers pop, not that you can afford them). */
 function playFrom(placements: Command[], seed: number, maxTicks = 120000, butter?: number, stopAfterRound = Infinity): SimState {
   const s = newGame()
-  if (butter !== undefined) s.butter = butter
+  if (butter !== undefined) s.players[0].butter = butter
   const rng: Rng = mulberry32(seed)
   for (const c of placements) apply(s, c, rng)
   let guard = maxTicks
@@ -158,7 +159,7 @@ console.log('inverse hypothesis')
 console.log('towers pop')
 {
   const s = newGame()
-  s.butter = 5000
+  s.players[0].butter = 5000
   const rng = mulberry32(7)
   for (let i = 0; i < 12; i++) apply(s, { t: 'place', tower: 'fire', cx: NEAR[i][0], cy: NEAR[i][1] }, rng)
   apply(s, { t: 'startRound' }, rng)
@@ -167,7 +168,7 @@ console.log('towers pop')
   ok(s.round === 1, 'round 1 cleared')
   ok(s.popped > 0, 'kernels were popped')
   ok(s.lives === START_LIVES, 'no lives lost with a strong defense')
-  ok(s.butter > 0, 'earned butter from pops + clear bonus')
+  ok(s.players[0].butter > 0, 'earned butter from pops + clear bonus')
 }
 
 // ── 5. Replay identity (with upgrades/targeting mid-run) ────────────────────
@@ -179,7 +180,7 @@ console.log('replay identity')
   ]
   const drive = (): SimState => {
     const s = newGame()
-    s.butter = 5000
+    s.players[0].butter = 5000
     const rng = mulberry32(99)
     for (const c of script) apply(s, c, rng)
     let guard = 5000
@@ -205,7 +206,7 @@ console.log('replay identity')
 console.log('split behavior')
 {
   const s = newGame()
-  s.butter = 5000
+  s.players[0].butter = 5000
   const rng = mulberry32(3)
   for (let i = 0; i < 6; i++) apply(s, { t: 'place', tower: 'laser', cx: NEAR[i][0], cy: NEAR[i][1] }, rng)
   let sawChild = false
@@ -239,11 +240,11 @@ console.log('build rules')
   for (let c = 0; c < COLS; c++) if (!tileBuildable(s, c, 2) || !tileBuildable(s, c, 10)) blocked = true
   ok(blocked, 'path tiles are not buildable')
   const poor = newGame()
-  poor.butter = 10
+  poor.players[0].butter = 10
   throws(() => apply(poor, { t: 'place', tower: 'laser', cx: NEAR[1][0], cy: NEAR[1][1] }, rng), 'cannot buy without butter')
-  const before = s.butter
+  const before = s.players[0].butter
   apply(s, { t: 'sell', id: 1 }, rng)
-  ok(s.butter > before && s.towers.length === 0, 'selling refunds butter and frees the tile')
+  ok(s.players[0].butter > before && s.towers.length === 0, 'selling refunds butter and frees the tile')
 }
 
 // ── 8. A real defense clears the campaign, then endless keeps going ──────────
@@ -259,7 +260,7 @@ console.log('winnable + endless')
     for (const [i, tw] of plan) {
       const [cx, cy] = NEAR[i]
       const def = TOWERS[tw]
-      if (!s.towers.some((t) => t.cx === cx && t.cy === cy) && s.butter >= def.cost && tileBuildable(s, cx, cy)) {
+      if (!s.towers.some((t) => t.cx === cx && t.cy === cy) && s.players[0].butter >= def.cost && tileBuildable(s, cx, cy)) {
         apply(s, { t: 'place', tower: tw, cx, cy }, rng)
       }
     }
@@ -268,7 +269,7 @@ console.log('winnable + endless')
       const def = TOWERS[t.type]
       for (let p = 0; p < Math.min(def.maxPaths, def.paths.length); p++) {
         const lvl = t.pathLevels[p]
-        if (lvl < def.paths[p].tiers.length && s.butter >= def.paths[p].tiers[lvl].cost + 400) {
+        if (lvl < def.paths[p].tiers.length && s.players[0].butter >= def.paths[p].tiers[lvl].cost + 400) {
           apply(s, { t: 'upgrade', id: t.id, path: p }, rng)
         }
       }
@@ -363,9 +364,9 @@ console.log('early-start bonus')
   const s2 = newGame()
   const rng = mulberry32(1)
   const bonus = earlyBonus(s2)
-  const before = s2.butter
+  const before = s2.players[0].butter
   apply(s2, { t: 'startRound' }, rng)
-  ok(s2.butter === before + bonus, 'starting a round awards the current early bonus')
+  ok(s2.players[0].butter === before + bonus, 'starting a round awards the current early bonus')
 }
 
 // ── 8d. Balance floor: a lazy minimal defense must NOT coast the campaign ───
@@ -389,7 +390,7 @@ console.log('laser resistance')
 {
   function laserHits(kernelType: 'shiney' | 'cob'): { before: number; after: number } {
     const s = newGame()
-    s.butter = 5000
+    s.players[0].butter = 5000
     const rng = mulberry32(1)
     apply(s, { t: 'place', tower: 'laser', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
     const tw = s.towers[0]
@@ -434,7 +435,7 @@ console.log('bonus mobs')
 console.log('crosspath')
 {
   const s = newGame()
-  s.butter = 100000
+  s.players[0].butter = 100000
   const rng = mulberry32(1)
   apply(s, { t: 'place', tower: 'laser', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
   const id = s.towers[0].id
@@ -524,7 +525,7 @@ console.log('churn bank + popcorn')
   // Butter Bank pays interest on held butter at round clear
   const s = newGame()
   const rng = mulberry32(5)
-  s.butter = 100000
+  s.players[0].butter = 100000
   apply(s, { t: 'place', tower: 'churn', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
   const cid = s.towers[0].id
   const bankIdx = churn.paths.findIndex((p) => p.key === 'bank')
@@ -532,22 +533,22 @@ console.log('churn bank + popcorn')
   ok(tierValue(churn, s.towers[0].pathLevels, 'interest') === 0.05, 'bank path sets 5% interest')
   // clear a round with a known balance → interest is credited (on top of the
   // round bonus and the churn's flat base income).
-  s.butter = 1000
+  s.players[0].butter = 1000
   s.round = 2
   s.phase = 'round'
   s.roundActive = true
   s.spawnQueue = []
   s.kernels = []
-  const before = s.butter
+  const before = s.players[0].butter
   tick(s, rng) // checkRoundEnd runs inside tick when the wave is empty
   const def = getRound(2, s.seed)
   const baseIncome = towerIncome(churn, s.towers[0].pathLevels) // flat churn base (250)
-  ok(s.butter === before + def.bonus + baseIncome + Math.floor(before * 0.05), 'round clear credits 5% interest on held butter')
+  ok(s.players[0].butter === before + def.bonus + baseIncome + Math.floor(before * 0.05), 'round clear credits 5% interest on held butter')
 
   // Popcorn path pops out lives each round you clear (popcorn = life)
   const s2 = newGame()
   const rng2 = mulberry32(6)
-  s2.butter = 100000
+  s2.players[0].butter = 100000
   apply(s2, { t: 'place', tower: 'churn', cx: NEAR[0][0], cy: NEAR[0][1] }, rng2)
   const popIdx = churn.paths.findIndex((p) => p.key === 'popcorn')
   apply(s2, { t: 'upgrade', id: s2.towers[0].id, path: popIdx }, rng2) // Popper: +1 life/round
@@ -569,7 +570,7 @@ console.log('freeze ray')
   const [cx, cy] = tileNearDist(D).tile
   function freezeCheck(kernelType: string, mega: boolean): { frozen: boolean; moved: number } {
     const s = newGame()
-    s.butter = 100000
+    s.players[0].butter = 100000
     const rng = mulberry32(1)
     apply(s, { t: 'place', tower: 'freeze', cx, cy }, rng)
     const tw = s.towers[0]
@@ -603,7 +604,7 @@ console.log('butter turret')
   const [cx, cy] = tileNearDist(D).tile
   function run(withButter: boolean, poison: boolean): { moved: number; hp: number; slowed: boolean } {
     const s = newGame()
-    s.butter = 100000
+    s.players[0].butter = 100000
     const rng = mulberry32(2)
     if (withButter) {
       apply(s, { t: 'place', tower: 'butter', cx, cy }, rng)
@@ -634,11 +635,11 @@ console.log('butter bomb')
   const bombDist = PATH.total * 0.5
   const s = newGame()
   const rng = mulberry32(3)
-  s.butter = 100000
-  const butterBefore = s.butter
+  s.players[0].butter = 100000
+  const butterBefore = s.players[0].butter
   apply(s, { t: 'placeBomb', size: 4, dist: bombDist }, rng) // Biggest Bomb, 500 dmg
   ok(s.bombs.length === 1, 'a placed bomb sits on the track')
-  ok(butterBefore - s.butter === BOMBS[4].cost, 'placing a bomb costs its butter')
+  ok(butterBefore - s.players[0].butter === BOMBS[4].cost, 'placing a bomb costs its butter')
   s.phase = 'round'
   s.roundActive = true
   s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }]
@@ -649,7 +650,7 @@ console.log('butter bomb')
   // Black Kernel is bomb-proof
   const s2 = newGame()
   const rng2 = mulberry32(4)
-  s2.butter = 100000
+  s2.players[0].butter = 100000
   apply(s2, { t: 'placeBomb', size: 4, dist: bombDist }, rng2)
   s2.phase = 'round'
   s2.roundActive = true
@@ -662,7 +663,7 @@ console.log('butter bomb')
   // rule checks
   throws(() => apply(newGame(), { t: 'placeBomb', size: 4, dist: PATH.total + 50 }, mulberry32(1)), 'cannot place a bomb off the track')
   const poor = newGame()
-  poor.butter = 10
+  poor.players[0].butter = 10
   throws(() => apply(poor, { t: 'placeBomb', size: 4, dist: bombDist }, mulberry32(1)), 'cannot place a bomb without butter')
 }
 
@@ -673,22 +674,22 @@ console.log('popcorn machine')
   const [cx, cy] = tileNearDist(D).tile
   const s = newGame()
   const rng = mulberry32(5)
-  s.butter = 100000
+  s.players[0].butter = 100000
   apply(s, { t: 'place', tower: 'popcorn', cx, cy }, rng)
   s.phase = 'round'
   s.roundActive = true
   s.spawnQueue = [{ type: 'poppable', atTick: s.tick + 9999 }]
   for (let i = 0; i < 8; i++) s.kernels.push({ id: s.nextId++, type: 'poppable', dist: D + i * 2, hp: 1 })
   const before = s.kernels.length
-  const butterBefore = s.butter
+  const butterBefore = s.players[0].butter
   tick(s, rng) // one activation eats up to capacity (5)
   ok(s.kernels.length < before, 'the popcorn machine sucks kernels off the track')
   ok(s.kernelsEaten > 0, 'eaten kernels are banked toward popcorn')
-  ok(s.butter === butterBefore, 'sucked kernels pay NO bounty (they become lives, not butter)')
+  ok(s.players[0].butter === butterBefore, 'sucked kernels pay NO bounty (they become lives, not butter)')
   // crossing the 100-kernel threshold pops a life
   const s2 = newGame()
   const rng2 = mulberry32(5)
-  s2.butter = 100000
+  s2.players[0].butter = 100000
   apply(s2, { t: 'place', tower: 'popcorn', cx, cy }, rng2)
   s2.kernelsEaten = 99
   s2.phase = 'round'
@@ -730,7 +731,7 @@ console.log('new towers structure')
   function playNew(seed: number): SimState {
     const s = newGame()
     const rng = mulberry32(seed)
-    s.butter = 100000
+    s.players[0].butter = 100000
     apply(s, { t: 'place', tower: 'freeze', cx: NEAR[0][0], cy: NEAR[0][1] }, rng)
     apply(s, { t: 'place', tower: 'butter', cx: NEAR[2][0], cy: NEAR[2][1] }, rng)
     apply(s, { t: 'place', tower: 'popcorn', cx: NEAR[4][0], cy: NEAR[4][1] }, rng)
@@ -749,6 +750,68 @@ console.log('new towers structure')
   const dTarget = PATH.total * 0.42
   const onPath = pointAt(PATH, dTarget)
   ok(Math.abs(nearestDistAlong(PATH, onPath.x, onPath.y) - dTarget) < 2, 'nearestDistAlong recovers a point\'s distance on the path')
+}
+
+// ── 17. Co-op economy: per-player pots, even-split earnings, send butter ─────
+console.log('co-op economy')
+{
+  const s = newGame(7, 'classic', 2)
+  ok(s.players.length === 2, 'a 2-player game has two butter pots')
+  ok(s.players[0].butter === s.players[1].butter, 'both players start with the same butter')
+  ok(typeof s.lives === 'number', 'lives are a single shared pool (co-op)')
+  const rng = mulberry32(1)
+  // each player spends from their OWN pot
+  s.players[0].butter = 1000
+  s.players[1].butter = 1000
+  apply(s, { t: 'place', tower: 'fire', cx: NEAR[0][0], cy: NEAR[0][1], player: 0 }, rng)
+  ok(s.players[0].butter === 800 && s.players[1].butter === 1000, 'player 0 placing pays from pot 0 only')
+  apply(s, { t: 'place', tower: 'fire', cx: NEAR[1][0], cy: NEAR[1][1], player: 1 }, rng)
+  ok(s.players[1].butter === 800 && s.players[0].butter === 800, 'player 1 placing pays from pot 1 only')
+  // a broke player can't spend a teammate's butter, even if the table is rich
+  s.players[0].butter = 100
+  s.players[1].butter = 5000
+  throws(() => apply(s, { t: 'place', tower: 'microwave', cx: NEAR[2][0], cy: NEAR[2][1], player: 0 }, rng), 'a broke player cannot spend a teammate\'s butter')
+  // send butter to a teammate
+  s.players[0].butter = 500
+  s.players[1].butter = 100
+  apply(s, { t: 'sendButter', player: 0, to: 1, amount: 200 }, rng)
+  ok(s.players[0].butter === 300 && s.players[1].butter === 300, 'sendButter transfers between pots')
+  throws(() => apply(s, { t: 'sendButter', player: 1, to: 0, amount: 99999 }, rng), 'cannot send more butter than you hold')
+  throws(() => apply(s, { t: 'sendButter', player: 0, to: 0, amount: 10 }, rng), 'cannot send butter to yourself')
+
+  // earnings split evenly across pots (remainder rotates via splitPtr)
+  const s2 = newGame(7, 'classic', 2)
+  s2.players[0].butter = 0
+  s2.players[1].butter = 0
+  s2.round = 2
+  s2.phase = 'round'
+  s2.roundActive = true
+  s2.spawnQueue = []
+  s2.kernels = []
+  tick(s2, mulberry32(3)) // round clears → the bonus is earned and split
+  const bonus = getRound(2, s2.seed).bonus
+  ok(s2.players[0].butter + s2.players[1].butter === bonus, 'the round bonus is fully credited across both pots')
+  ok(Math.abs(s2.players[0].butter - s2.players[1].butter) <= 1, 'the round bonus splits ~evenly (remainder ≤ 1)')
+
+  // determinism holds with 2 pots + player-tagged commands + a gift
+  function play2(seed: number): SimState {
+    const g = newGame(seed, 'classic', 2)
+    const r = mulberry32(seed)
+    g.players[0].butter = 3000
+    g.players[1].butter = 3000
+    apply(g, { t: 'place', tower: 'laser', cx: NEAR[0][0], cy: NEAR[0][1], player: 0 }, r)
+    apply(g, { t: 'place', tower: 'fire', cx: NEAR[2][0], cy: NEAR[2][1], player: 1 }, r)
+    apply(g, { t: 'sendButter', player: 1, to: 0, amount: 500 }, r)
+    let guard = 5000
+    while (g.phase !== 'lost' && g.round < 3 && guard-- > 0) {
+      if (g.phase === 'build') apply(g, { t: 'startRound' }, r)
+      tick(g, r)
+    }
+    return g
+  }
+  ok(snap(play2(11)) === snap(play2(11)), 'co-op (2 pots + tagged commands + a gift) stays deterministic')
+  // single-player is unchanged: one pot, earnings all land there
+  ok(newGame(1).players.length === 1, 'single-player still makes exactly one pot')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -12,14 +12,18 @@ import { DT, TPS, TILE, WORLD_H, WORLD_W, type BombType, type Command, type SimS
 import { draw, type FxItem } from './render.ts'
 import { playSfx } from './sound.svelte.ts'
 import { settings } from './settings.svelte.ts'
+import * as net from './net.ts'
+import type { LobbyPlayer } from '../shared/protocol.ts'
 
 const AUTO_DELAY_TICKS = 3 * TPS // grace before auto-start fires (time to place)
 
 export const ui = $state({
-  screen: 'menu' as 'menu' | 'playing', // map picker vs. the board
+  screen: 'menu' as 'menu' | 'coop' | 'lobby' | 'playing', // picker / co-op setup / waiting room / board
   mapId: DEFAULT_MAP,
   lives: 0,
-  butter: 0,
+  butter: 0, // MY pot (players[myIndex]) — the HUD number
+  butters: [] as number[], // every player's pot (co-op HUD)
+  myIndex: 0, // which player this client is (0 in single-player)
   round: 0, // 1-based, the active/next round
   totalRounds: CAMPAIGN_ROUNDS,
   best: 0,
@@ -35,6 +39,13 @@ export const ui = $state({
   selectedId: null as number | null,
   error: '',
   version: 0, // bump to poke Svelte when selection details change
+  // ── co-op ──
+  online: false, // true once connected to a room (server-authoritative)
+  roomCode: '', // the shareable code
+  myName: '', // this client's display name
+  lobby: [] as LobbyPlayer[], // seats in the room
+  isHost: false,
+  notice: '', // transient co-op toast (gift arrived / teammate needs butter)
 })
 
 let sim: SimState = newGame()
@@ -53,9 +64,15 @@ export function towerOrder(): TowerType[] {
   return TOWER_ORDER.map((id) => TOWERS[id])
 }
 
+/** This client's own butter pot (players[myIndex]; players[0] in single-player). */
+function myButter(): number {
+  return sim.players[ui.myIndex]?.butter ?? 0
+}
+
 function syncUi(): void {
   ui.lives = sim.lives
-  ui.butter = sim.butter
+  ui.butter = myButter()
+  ui.butters = sim.players.map((p) => p.butter)
   ui.round = sim.round + 1 // the active/next round, 1-based (endless goes past 15)
   ui.best = sim.bestRound
   ui.endless = sim.round >= CAMPAIGN_ROUNDS
@@ -78,6 +95,12 @@ function flashError(msg: string): void {
 }
 
 function dispatch(cmd: Command): boolean {
+  // In co-op the server is authoritative: send the command and let the next
+  // snapshot update state (the server stamps our seat + validates).
+  if (ui.online) {
+    net.sendCmd(cmd)
+    return true
+  }
   try {
     apply(sim, cmd, rng)
     syncUi()
@@ -116,20 +139,24 @@ function loop(now: number): void {
     if (ctx) draw(ctx, sim, { hoverTile: null, placingType: null, placingBomb: null, bombGhostDist: null, selectedId: null, canPlace: false, fx })
     return
   }
-  const speed = ui.paused ? 0 : ui.speed
-  acc += realDt * speed
-  let steps = 0
-  while (acc >= DT && steps < 8) {
-    tick(sim, rng)
-    ingestEvents()
-    acc -= DT
-    steps++
-  }
-  if (steps > 0) syncUi()
-  // auto-start the next round after a short grace, if enabled
-  if (sim.phase === 'build' && settings.autoStart && sim.tick - sim.buildStartTick >= AUTO_DELAY_TICKS) {
-    dispatch({ t: 'startRound' })
-    playSfx('start')
+  // Co-op: the SERVER runs the sim. We just render the latest snapshot (set by
+  // the net handler) — no local tick, no local auto-start.
+  if (!ui.online) {
+    const speed = ui.paused ? 0 : ui.speed
+    acc += realDt * speed
+    let steps = 0
+    while (acc >= DT && steps < 8) {
+      tick(sim, rng)
+      ingestEvents()
+      acc -= DT
+      steps++
+    }
+    if (steps > 0) syncUi()
+    // auto-start the next round after a short grace, if enabled
+    if (sim.phase === 'build' && settings.autoStart && sim.tick - sim.buildStartTick >= AUTO_DELAY_TICKS) {
+      dispatch({ t: 'startRound' })
+      playSfx('start')
+    }
   }
   advanceFx(realDt)
   if (ctx) {
@@ -246,7 +273,7 @@ export function onPointerLeave(): void {
 function canPlaceHover(): boolean {
   if (!ui.placingType || !hoverTile) return false
   const def = TOWERS[ui.placingType]
-  return sim.butter >= def.cost && tileBuildable(sim, hoverTile.cx, hoverTile.cy)
+  return myButter() >= def.cost && tileBuildable(sim, hoverTile.cx, hoverTile.cy)
 }
 
 export function onCanvasClick(clientX: number, clientY: number): void {
@@ -257,7 +284,7 @@ export function onCanvasClick(clientX: number, clientY: number): void {
     const d = nearestDistAlong(MAPS[sim.mapId].path, w.x, w.y)
     if (dispatch({ t: 'placeBomb', size: ui.placingBomb, dist: d })) {
       playSfx('place')
-      if (sim.butter < BOMBS[ui.placingBomb].cost) ui.placingBomb = null // out of butter → exit
+      if (myButter() < BOMBS[ui.placingBomb].cost) ui.placingBomb = null // out of butter → exit
     }
     return
   }
@@ -269,7 +296,7 @@ export function onCanvasClick(clientX: number, clientY: number): void {
     if (dispatch({ t: 'place', tower: ui.placingType, cx: tile.cx, cy: tile.cy })) {
       playSfx('place')
       // stay in place-mode if still affordable, else exit
-      if (sim.butter < TOWERS[ui.placingType].cost) ui.placingType = null
+      if (myButter() < TOWERS[ui.placingType].cost) ui.placingType = null
     }
     return
   }
@@ -327,7 +354,7 @@ export function selectedTower() {
       level,
       maxLevel: p.tiers.length,
       nextTier, // { name, cost } | null
-      canUpgrade: nextTier !== null && !blockedByCrosspath && sim.butter >= nextTier.cost,
+      canUpgrade: nextTier !== null && !blockedByCrosspath && myButter() >= nextTier.cost,
       locked: blockedByCrosspath,
     }
   })
@@ -386,10 +413,13 @@ export function mapPreviewPoints(m: GameMap): string {
 }
 
 function startGame(mapId: string): void {
+  net.disconnect()
+  ui.online = false
   sim = newGame(1, mapId)
   rng = mulberry32(1)
   fx.length = 0
   ui.mapId = sim.mapId
+  ui.myIndex = 0
   ui.placingType = null
   ui.placingBomb = null
   ui.selectedId = null
@@ -400,17 +430,93 @@ function startGame(mapId: string): void {
   ui.version++
 }
 
-/** Pick a map from the menu and start playing it. */
+/** Pick a map from the menu and start playing it (single-player). */
 export function chooseMap(mapId: string): void {
   startGame(mapId)
 }
 
-/** Back to the map picker (from the lost screen). */
+/** Back to the map picker (from the lost screen / lobby). */
 export function openMenu(): void {
+  net.disconnect()
+  ui.online = false
   ui.screen = 'menu'
   ui.selectedId = null
   ui.placingType = null
+  ui.placingBomb = null
   ui.version++
+}
+
+// ── Co-op multiplayer ─────────────────────────────────────────────────────────
+
+let noticeTimer: ReturnType<typeof setTimeout> | null = null
+function showNotice(text: string): void {
+  ui.notice = text
+  if (noticeTimer) clearTimeout(noticeTimer)
+  noticeTimer = setTimeout(() => (ui.notice = ''), 3500)
+}
+
+/** A short, friendly, shareable room code (client-side only — not the sim). */
+export function suggestRoomCode(): string {
+  const words = ['corn', 'butter', 'kernel', 'pop', 'cob', 'salt', 'kettle', 'movie']
+  const w = words[Math.floor(Math.random() * words.length)]
+  return `${w}-${Math.floor(1000 + Math.random() * 9000)}`
+}
+
+/** Open the co-op setup form (enter a name + room code). */
+export function openCoop(): void {
+  ui.screen = 'coop'
+  if (!ui.roomCode) ui.roomCode = suggestRoomCode()
+}
+
+/** Connect to a room and enter its lobby (creates the room if you're first). */
+export function joinCoop(name: string, code: string): void {
+  ui.myName = (name || '').trim().slice(0, 16) || 'Player'
+  ui.roomCode = (code || '').trim() || suggestRoomCode()
+  ui.online = true
+  fx.length = 0
+  net.connect(ui.roomCode, ui.myName, {
+    onWelcome(index, isHost) {
+      ui.myIndex = index
+      ui.isHost = isHost
+      if (ui.screen !== 'playing') ui.screen = 'lobby'
+    },
+    onLobby(players, isHost, mapId) {
+      ui.lobby = players
+      ui.isHost = isHost
+      ui.mapId = mapId
+      ui.version++
+    },
+    onSnapshot(state) {
+      sim = state
+      if (ui.screen !== 'playing') ui.screen = 'playing'
+      ingestEvents() // best-effort FX from the tick this snapshot captured
+      syncUi()
+      ui.version++
+    },
+    onNotice: showNotice,
+    onError: flashError,
+    onClose() {
+      if (!ui.online) return
+      ui.online = false
+      ui.screen = 'menu'
+      flashError('Disconnected from the room.')
+    },
+  })
+}
+
+/** Host starts the co-op match on the chosen map (the server builds the sim). */
+export function coopStart(mapId: string): void {
+  net.startGame(mapId)
+}
+
+/** Gift butter to a teammate (co-op). */
+export function sendButterTo(to: number, amount: number): void {
+  if (amount > 0) dispatch({ t: 'sendButter', to, amount })
+}
+
+/** Nudge teammates that you need butter (a toast, not a transfer). */
+export function askForButter(): void {
+  net.askForButter()
 }
 
 // initialize UI mirror

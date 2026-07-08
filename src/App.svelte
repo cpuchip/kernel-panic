@@ -5,16 +5,22 @@
     selectType, selectedTower, upgradeSelected, sellSelected, setTargetSelected,
     startRound, setSpeed, togglePause, restart, towerOrder, deselect,
     mapChoices, mapPreviewPoints, chooseMap, openMenu, bombChoices, selectBomb,
+    openCoop, joinCoop, coopStart, sendButterTo, askForButter,
   } from './game.svelte.ts'
   import Settings from './Settings.svelte'
   import type { TargetPolicy } from '../shared/sim/types.ts'
 
   let canvas: HTMLCanvasElement
+  let coopName = $state('')
+  let coopCode = $state('')
 
   onMount(() => {
     start(canvas)
     return () => stop()
   })
+
+  // the teammate seat (2-player co-op has exactly one "other")
+  const others = $derived(ui.lobby.filter((p) => p.index !== ui.myIndex))
 
   const towers = towerOrder()
   const bombs = bombChoices()
@@ -42,12 +48,16 @@
       {#if ui.best > 0}<span class="best">· best {ui.best}</span>{/if}
     </span>
     <span class="grow"></span>
-    <div class="speed">
-      <button class:on={!ui.paused && ui.speed === 1} onclick={() => setSpeed(1)}>1×</button>
-      <button class:on={!ui.paused && ui.speed === 2} onclick={() => setSpeed(2)}>2×</button>
-      <button class:on={!ui.paused && ui.speed === 3} onclick={() => setSpeed(3)}>3×</button>
-      <button class:on={ui.paused} onclick={togglePause} aria-label="pause">{ui.paused ? '▶' : '⏸'}</button>
-    </div>
+    {#if !ui.online}
+      <div class="speed">
+        <button class:on={!ui.paused && ui.speed === 1} onclick={() => setSpeed(1)}>1×</button>
+        <button class:on={!ui.paused && ui.speed === 2} onclick={() => setSpeed(2)}>2×</button>
+        <button class:on={!ui.paused && ui.speed === 3} onclick={() => setSpeed(3)}>3×</button>
+        <button class:on={ui.paused} onclick={togglePause} aria-label="pause">{ui.paused ? '▶' : '⏸'}</button>
+      </div>
+    {:else}
+      <span class="coop-tag">🤝 co-op</span>
+    {/if}
     <Settings />
   </header>
 
@@ -60,6 +70,7 @@
     ></canvas>
     {#if ui.error}<div class="err">{ui.error}</div>{/if}
     {#if ui.banner}<div class="banner">{ui.banner}</div>{/if}
+    {#if ui.notice}<div class="notice">{ui.notice}</div>{/if}
 
     {#if sel}
       <div class="sel">
@@ -97,6 +108,17 @@
   </div>
 
   <footer class="controls">
+    {#if ui.online}
+      <div class="coopbar">
+        <span class="me">You 🧈{ui.butter}</span>
+        {#each others as o (o.index)}
+          <span class="mate" style="color:{o.color}">{o.name} 🧈{ui.butters[o.index] ?? 0}</span>
+          <button class="give" onclick={() => sendButterTo(o.index, 100)} disabled={ui.butter < 100}>+100→</button>
+          <button class="give" onclick={() => sendButterTo(o.index, 500)} disabled={ui.butter < 500}>+500→</button>
+        {/each}
+        <button class="ask" onclick={askForButter}>Ask 🙏</button>
+      </div>
+    {/if}
     <div class="palette">
       {#each towers as t (t.id)}
         <button
@@ -134,14 +156,18 @@
     {/if}
   </footer>
 
-  {#if ui.phase === 'lost'}
+  {#if ui.phase === 'lost' && ui.screen === 'playing'}
     <div class="overlay">
       <div class="panel end">
         <h2>🍿 The kitchen fell</h2>
         <p>The kernels overran you on round {ui.round}.{#if ui.best > 0} Best run: round {ui.best}.{/if} Butter up and try again.</p>
         <div class="end-actions">
-          <button class="primary" onclick={restart}>Play again</button>
-          <button onclick={openMenu}>Change map</button>
+          {#if ui.online}
+            <button class="primary" onclick={openMenu}>Back to menu</button>
+          {:else}
+            <button class="primary" onclick={restart}>Play again</button>
+            <button onclick={openMenu}>Change map</button>
+          {/if}
         </div>
       </div>
     </div>
@@ -164,6 +190,59 @@
             </button>
           {/each}
         </div>
+        <button class="coop-enter" onclick={() => { openCoop(); coopCode = ui.roomCode }}>🤝 Play with a friend</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if ui.screen === 'coop'}
+    <div class="overlay menu">
+      <div class="panel pick coop-setup">
+        <h2>🤝 play together</h2>
+        <p class="sub">Pick a name and a room code, then share the code. Whoever joins first is the host.</p>
+        <label class="field">Your name
+          <input bind:value={coopName} maxlength="16" placeholder="Player" />
+        </label>
+        <label class="field">Room code
+          <input bind:value={coopCode} maxlength="24" placeholder={ui.roomCode} />
+        </label>
+        <div class="end-actions">
+          <button class="primary" onclick={() => joinCoop(coopName, coopCode || ui.roomCode)}>Enter room →</button>
+          <button onclick={openMenu}>Back</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if ui.screen === 'lobby'}
+    <div class="overlay menu">
+      <div class="panel pick coop-lobby">
+        <h2>🤝 room: {ui.roomCode}</h2>
+        <p class="sub">Share the room code so your buddy can join.</p>
+        <div class="seats">
+          {#each ui.lobby as p (p.index)}
+            <span class="seat" class:me={p.index === ui.myIndex} style="border-color:{p.color};color:{p.color}">
+              {p.name}{p.index === 0 ? ' 👑' : ''}{p.index === ui.myIndex ? ' (you)' : ''}
+            </span>
+          {/each}
+        </div>
+        {#if ui.isHost}
+          <p class="sub">Pick a kitchen to start (tap when everyone's in):</p>
+          <div class="mapgrid">
+            {#each maps as m (m.id)}
+              <button class="mapcard" onclick={() => coopStart(m.id)}>
+                <svg viewBox="0 0 640 640" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                  <rect x="4" y="4" width="632" height="632" rx="28" class="mapbg" />
+                  <polyline points={mapPreviewPoints(m)} class="mapline" />
+                </svg>
+                <span class="mapname">{m.name}</span>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="sub">Waiting for the host to pick a kitchen and start…</p>
+        {/if}
+        <button onclick={openMenu}>Leave room</button>
       </div>
     </div>
   {/if}
@@ -359,6 +438,33 @@
   .mapline { fill: none; stroke: var(--pop); stroke-width: 22; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; }
   .mapname { font-weight: 700; font-size: 14px; }
   .mapblurb { font-size: 13px; color: var(--dim); line-height: 1.3; }
+
+  /* ── co-op ─────────────────────────────────────────────────────────────── */
+  .coop-tag { font-size: 13px; color: var(--pop); font-weight: 600; }
+  .notice {
+    position: absolute; left: 50%; top: 44px; transform: translateX(-50%);
+    padding: 6px 14px; border-radius: 9px; font-size: 13px; text-align: center;
+    pointer-events: none; max-width: 92%;
+    background: rgba(30,22,12,0.95); border: 1px solid var(--pop); color: #ffe6c8;
+  }
+  .coopbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
+  .coopbar .me { color: #f2d16b; font-weight: 600; }
+  .coopbar .mate { font-weight: 600; }
+  .coopbar .give, .coopbar .ask { padding: 5px 9px; font-size: 12px; }
+  .coopbar .ask { margin-left: auto; }
+  .coop-enter {
+    margin-top: 8px; align-self: center;
+    background: linear-gradient(160deg, #3a2a5a, #241a3a);
+    border-color: #7f9cff; color: #dfe6ff; font-weight: 700; padding: 10px 18px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; text-align: left; font-size: 13px; color: var(--dim); }
+  .field input {
+    font: inherit; padding: 9px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  .seats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .seat { padding: 5px 12px; border: 2px solid var(--line); border-radius: 20px; font-weight: 600; font-size: 14px; }
+  .seat.me { background: rgba(255,138,76,0.12); }
 
   .ver { position: fixed; bottom: 3px; right: 8px; font-size: 13px; color: var(--dim); pointer-events: none; }
   .ver a { color: var(--pop); pointer-events: auto; text-decoration: none; }

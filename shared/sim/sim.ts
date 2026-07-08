@@ -23,6 +23,7 @@ import {
   type Command,
   type Kernel,
   type KernelTypeId,
+  type PlayerState,
   type SimState,
   type TargetPolicy,
   type Tower,
@@ -36,6 +37,30 @@ function fail(msg: string): never {
 const BUILD_CLEARANCE = 22 // world units a tower must sit off the path
 const HIT_RADIUS = 6 // dart collision padding beyond kernel radius
 const MAX_INTEREST_RATE = 0.5 // Butter Bank: cap total interest so it can't run away
+
+/** The pot a command spends from / refunds to (default the solo player). */
+function pot(s: SimState, player?: number): PlayerState {
+  return s.players[player ?? 0] ?? s.players[0]
+}
+/** Total butter held across all pots (interest is figured on the whole table). */
+function totalButter(s: SimState): number {
+  let t = 0
+  for (const p of s.players) t += p.butter
+  return t
+}
+/** Credit an EARNING evenly across pots; the integer remainder rotates via
+ * splitPtr so it's fair over a game. For N=1 this is just players[0] += total. */
+function earn(s: SimState, total: number): void {
+  if (total <= 0) return
+  const n = s.players.length
+  const base = Math.floor(total / n)
+  if (base > 0) for (const p of s.players) p.butter += base
+  let rem = total - base * n
+  while (rem-- > 0) {
+    s.players[s.splitPtr % n].butter += 1
+    s.splitPtr = (s.splitPtr + 1) % n
+  }
+}
 
 /** The path the kernels walk this game (chosen at newGame, part of the config). */
 function pathOf(s: SimState): Path {
@@ -62,7 +87,8 @@ function activeRound(s: SimState): number {
   return s.round + 1
 }
 
-export function newGame(seed = 1, mapId: string = DEFAULT_MAP): SimState {
+export function newGame(seed = 1, mapId: string = DEFAULT_MAP, numPlayers = 1): SimState {
+  const n = Math.max(1, numPlayers)
   return {
     seed,
     mapId: MAPS[mapId] ? mapId : DEFAULT_MAP,
@@ -71,7 +97,8 @@ export function newGame(seed = 1, mapId: string = DEFAULT_MAP): SimState {
     round: 0,
     buildStartTick: 0,
     lives: START_LIVES,
-    butter: START_BUTTER,
+    players: Array.from({ length: n }, () => ({ butter: START_BUTTER })),
+    splitPtr: 0,
     kernels: [],
     towers: [],
     projectiles: [],
@@ -119,8 +146,9 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
       const def = TOWERS[cmd.tower]
       if (!def) fail('unknown tower')
       if (!tileBuildable(s, cmd.cx, cmd.cy)) fail('tile not buildable')
-      if (s.butter < def.cost) fail('not enough butter')
-      s.butter -= def.cost
+      const p = pot(s, cmd.player)
+      if (p.butter < def.cost) fail('not enough butter')
+      p.butter -= def.cost
       const { x, y } = tileCenter(cmd.cx, cmd.cy)
       s.towers.push({ id: s.nextId++, type: def.id, x, y, cx: cmd.cx, cy: cmd.cy, cd: 0, target: 'first', pathLevels: def.paths.map(() => 0) })
       return
@@ -129,8 +157,9 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
       const b = BOMBS[cmd.size]
       if (!b) fail('unknown bomb')
       if (cmd.dist < 0 || cmd.dist > pathOf(s).total) fail('bomb must sit on the track')
-      if (s.butter < b.cost) fail('not enough butter')
-      s.butter -= b.cost
+      const p = pot(s, cmd.player)
+      if (p.butter < b.cost) fail('not enough butter')
+      p.butter -= b.cost
       s.bombs.push({ id: s.nextId++, dist: cmd.dist, dmg: b.dmg, radius: BOMB_RADIUS, size: cmd.size })
       return
     }
@@ -145,8 +174,9 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
       // crosspath gate: opening a NEW path can't exceed maxPaths
       if (lvl === 0 && activePaths(t.pathLevels) >= def.maxPaths) fail(`only ${def.maxPaths} upgrade paths per tower`)
       const cost = def.paths[p].tiers[lvl].cost
-      if (s.butter < cost) fail('not enough butter')
-      s.butter -= cost
+      const wallet = pot(s, cmd.player)
+      if (wallet.butter < cost) fail('not enough butter')
+      wallet.butter -= cost
       t.pathLevels[p]++
       return
     }
@@ -154,8 +184,20 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
       const i = s.towers.findIndex((w) => w.id === cmd.id)
       if (i < 0) fail('no such tower')
       const t = s.towers[i]
-      s.butter += Math.floor(towerSpent(TOWERS[t.type], t.pathLevels) * 0.7) // 70% refund
+      pot(s, cmd.player).butter += Math.floor(towerSpent(TOWERS[t.type], t.pathLevels) * 0.7) // 70% refund to the seller
       s.towers.splice(i, 1)
+      return
+    }
+    case 'sendButter': {
+      const from = pot(s, cmd.player)
+      const to = s.players[cmd.to]
+      if (!to) fail('no such teammate')
+      if (cmd.to === (cmd.player ?? 0)) fail('cannot send butter to yourself')
+      const amount = Math.floor(cmd.amount)
+      if (amount <= 0) fail('amount must be positive')
+      if (from.butter < amount) fail('not enough butter to send')
+      from.butter -= amount
+      to.butter += amount
       return
     }
     case 'target': {
@@ -166,7 +208,7 @@ export function apply(s: SimState, cmd: Command, _rng: Rng): void {
     }
     case 'startRound': {
       if (s.phase !== 'build') fail('not in build phase')
-      s.butter += earlyBonus(s) // reward starting early (0 once the window elapses)
+      earn(s, earlyBonus(s)) // reward starting early (0 once the window elapses), split across pots
       startRound(s)
       return
     }
@@ -515,7 +557,7 @@ function resolveDeaths(s: SimState): void {
     }
     const kt = KERNELS[k.type]
     const p = kernelPos(path, k)
-    s.butter += kt.bounty
+    earn(s, kt.bounty) // pop bounty splits evenly across pots
     s.popped++
     s.events.push({ t: 'pop', x: p.x, y: p.y, kind: k.type, boss: kt.boss })
     if (kt.children) {
@@ -539,11 +581,11 @@ function checkRoundEnd(s: SimState): void {
     // clears (rewards saving up), before the round bonus + flat churn income.
     let bankRate = 0
     for (const t of s.towers) bankRate += tierValue(TOWERS[t.type], t.pathLevels, 'interest')
-    const interest = Math.floor(s.butter * Math.min(bankRate, MAX_INTEREST_RATE))
-    // round-clear bonus + flat churn income
+    const interest = Math.floor(totalButter(s) * Math.min(bankRate, MAX_INTEREST_RATE))
+    // round-clear bonus + flat churn income — all split evenly across pots
     let income = def.bonus + interest
     for (const t of s.towers) income += towerIncome(TOWERS[t.type], t.pathLevels)
-    s.butter += income
+    earn(s, income)
     // Butter Churn's Popcorn path pops out a few lives each round you clear.
     let livesGain = 0
     for (const t of s.towers) livesGain += tierValue(TOWERS[t.type], t.pathLevels, 'livesPerRound')

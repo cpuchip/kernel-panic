@@ -223,6 +223,12 @@ export interface SimEvent {
   boss?: boolean
 }
 
+/** One player's butter pot. Lives are shared (co-op); butter is per-player: you
+ * spend your own, earnings split evenly across pots, and you can send/request. */
+export interface PlayerState {
+  butter: number
+}
+
 export interface SimState {
   seed: number
   mapId: string // which map's path the kernels walk (part of the deterministic config)
@@ -230,8 +236,9 @@ export interface SimState {
   phase: Phase
   round: number // rounds cleared so far; the active/next round index
   buildStartTick: number // tick the current build phase began (for the early bonus)
-  lives: number
-  butter: number
+  lives: number // SHARED across all players (win/lose together)
+  players: PlayerState[] // one butter pot each; players[0] is the solo player in SP
+  splitPtr: number // rotating index so the remainder of an even split is shared fairly
   kernels: Kernel[]
   towers: Tower[]
   projectiles: Projectile[]
@@ -246,10 +253,13 @@ export interface SimState {
   events: SimEvent[]
 }
 
+// `player` is the pot a spend/refund/earning hits (default 0 = the solo player).
+// In MP the server stamps it from the sender's seat, never trusting the client.
 export type Command =
-  | { t: 'place'; tower: string; cx: number; cy: number }
-  | { t: 'placeBomb'; size: number; dist: number } // drop a Butter Bomb on the track
-  | { t: 'upgrade'; id: number; path: number }
-  | { t: 'sell'; id: number }
+  | { t: 'place'; tower: string; cx: number; cy: number; player?: number }
+  | { t: 'placeBomb'; size: number; dist: number; player?: number } // drop a Butter Bomb on the track
+  | { t: 'upgrade'; id: number; path: number; player?: number }
+  | { t: 'sell'; id: number; player?: number }
+  | { t: 'sendButter'; to: number; amount: number; player?: number } // gift butter to a teammate
   | { t: 'target'; id: number; policy: TargetPolicy }
-  | { t: 'startRound' }
+  | { t: 'startRound'; player?: number }

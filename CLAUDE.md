@@ -42,8 +42,9 @@ Full design: `docs/design.md`. Roadmap/record: `ROADMAP.md`.
 npm run smoke && npm run compile && npm run build
 ```
 
-(Phase 2 adds `npm run wstest`.) Green, then commit. Pushing `main` auto-deploys via
-Dokploy.
+For co-op (server) changes also run `npm run wstest` (start `npm run serve` first —
+it spins two clients through a real WebSocket). Green, then commit. Pushing `main`
+auto-deploys via Dokploy.
 
 ## Conventions
 
