@@ -17,7 +17,7 @@
 
 <style>
   .settings { position: relative; }
-  .gear { padding: 4px 9px; font-size: 14px; }
+  .gear { padding: 7px 10px; font-size: 14px; } /* roomier touch target */
   .pop {
     position: absolute;
     top: calc(100% + 6px);

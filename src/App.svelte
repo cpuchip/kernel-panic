@@ -34,7 +34,7 @@
 
 <main>
   <header class="hud">
-    <span class="title">kernel&nbsp;panic</span>
+    <h1 class="title">kernel&nbsp;panic</h1>
     <span class="stat lives">🍿 {ui.lives}</span>
     <span class="stat butter">🧈 {ui.butter}</span>
     <span class="stat round">
@@ -176,6 +176,10 @@
     height: 100dvh;
     display: grid;
     grid-template-rows: auto 1fr auto;
+    /* minmax(0, …) caps the single column to the container so a wide, scrollable
+       child (the tower/bomb palette) can't blow the whole layout past the
+       viewport — the regression when the palette grew from 4 to 12 buttons. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
     padding: 6px clamp(6px, 2vw, 18px) max(6px, env(safe-area-inset-bottom));
     max-width: 760px;
@@ -191,7 +195,7 @@
     flex-wrap: wrap;
     min-height: 34px;
   }
-  .title { font-weight: 800; letter-spacing: 0.03em; color: var(--pop); text-transform: lowercase; }
+  .title { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: 0.03em; color: var(--pop); text-transform: lowercase; }
   .stat { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; }
   .lives { color: #ffd7a1; }
   .butter { color: #f2d16b; }
@@ -199,7 +203,7 @@
   .best { color: #8f7a63; font-size: 13px; }
   .grow { flex: 1 1 8px; }
   .speed { display: flex; gap: 4px; }
-  .speed button { padding: 3px 8px; font-size: 13px; }
+  .speed button { padding: 7px 10px; font-size: 13px; } /* roomier touch target */
 
   /* ── board: square, fills the middle row ──────────────────────────────── */
   .board {
@@ -210,7 +214,10 @@
     min-height: 0;
   }
   canvas {
-    width: min(620px, 94vw, calc(100dvh - 190px));
+    /* the largest 1:1 square that fits BOTH the board's width and its remaining
+       height — no magic "reserve N px for the chrome" number to drift out of date. */
+    max-width: min(620px, 94vw);
+    max-height: 100%;
     aspect-ratio: 1 / 1;
     display: block;
     border-radius: 12px;
@@ -273,6 +280,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0; /* let the grid child shrink so the palette can scroll, not push */
   }
   .palette {
     display: flex;
@@ -280,6 +288,7 @@
     overflow-x: auto;
     padding-bottom: 2px;
     scrollbar-width: thin;
+    min-width: 0; /* required for overflow-x to engage inside a flex/grid parent */
   }
   .tw {
     flex: 1 0 auto;
@@ -349,15 +358,17 @@
   .mapbg { fill: #1b1410; stroke: var(--line); stroke-width: 2; }
   .mapline { fill: none; stroke: var(--pop); stroke-width: 22; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; }
   .mapname { font-weight: 700; font-size: 14px; }
-  .mapblurb { font-size: 11px; color: var(--dim); line-height: 1.25; }
+  .mapblurb { font-size: 13px; color: var(--dim); line-height: 1.3; }
 
-  .ver { position: fixed; bottom: 3px; right: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
+  .ver { position: fixed; bottom: 3px; right: 8px; font-size: 13px; color: var(--dim); pointer-events: none; }
   .ver a { color: var(--pop); pointer-events: auto; text-decoration: none; }
   .ver a:hover { text-decoration: underline; }
 
   @media (min-width: 620px) {
     .tw { flex: 0 0 auto; }
-    .start { width: auto; align-self: flex-start; }
+    .start { width: auto; align-self: flex-start; flex: 0 0 auto; }
     .controls { flex-direction: row; align-items: center; justify-content: space-between; }
+    /* palette takes the remaining row width beside Start, and scrolls within it */
+    .palette { flex: 1 1 0; }
   }
 </style>

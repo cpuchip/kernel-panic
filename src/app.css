@@ -56,6 +56,13 @@ button:active:not(:disabled) {
   transform: translateY(1px);
 }
 
+/* keyboard users get a visible focus ring (mouse clicks don't trigger it) */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--pop);
+  outline-offset: 2px;
+}
+
 button:disabled {
   cursor: default;
 }
