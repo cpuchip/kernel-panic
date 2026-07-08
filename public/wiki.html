@@ -128,16 +128,13 @@
         <tr><td>101+</td><td>Free Play — endless, ever-escalating</td><td>—</td></tr>
       </tbody>
     </table>
-    <div class="note"><b>Coming next update:</b> <b>freezing</b> and <b>bombs</b> — new towers, and
-      the black / white / zebra / purple kernels' resistances switch on. Plus a Butter Churn upgrade
-      that gives you lives back.</div>
+    <div class="note"><b>Now live:</b> <b>freezing</b>, <b>butter-slow</b>, and <b>bombs</b> — the
+      Freeze Ray, Butter Turret, Butter Bombs, and the Popcorn Machine (see below). The black /
+      white / zebra / purple kernels' resistances are switched on. <b>Coming next:</b> co-op
+      multiplayer.</div>
   </section>
 
-  <section id="towers">
-    <h2>Towers</h2>
-    <p class="grouphint">Fire Tosser, Microwave, Laser, and the Butter Churn — each with three
-      upgrade paths (pick two). Full guide coming to the wiki soon.</p>
-  </section>
+  <section id="towers"></section>
 
   <section id="maps">
     <h2>Maps</h2>
@@ -164,7 +161,7 @@ const GROUPS = [
     { id:'kettle', name:'Kettle Corn', rar:'common', sp:200, hp:1, bt:1, d:4, pop:'—' },
     { id:'candy', name:'Candy Corn', rar:'common', sp:250, hp:1, bt:1, d:5, pop:'—' },
   ]},
-  { title: 'Immunity kernels', hint: 'Each shrugs off a damage type. Freeze & bomb resistances switch on next update.', mobs: [
+  { title: 'Immunity kernels', hint: 'Each shrugs off a damage type — laser, freeze, or bomb (all now live).', mobs: [
     { id:'black', name:'Black Kernel', rar:'rare', sp:150, hp:1, bt:1, d:6, pop:'—', res:['B'] },
     { id:'white', name:'White Kernel', rar:'rare', sp:150, hp:1, bt:1, d:6, pop:'—', res:['F'] },
     { id:'blackwhite', name:'Black-and-White Kernel', rar:'rare', sp:175, hp:1, bt:1, d:7, pop:'1 Black + 1 White', res:['B','F'] },
@@ -190,13 +187,15 @@ const GROUPS = [
 // which sprites actually exist in /assets/sprites (the rest get a placeholder chip)
 const HAVE = new Set(['poppable','kernel','hard','kettle','candy','black','white','blackwhite',
   'purple','melted','rainbow','superhard','shiney','cob','quickcob','bunch','ton','bigcorn',
-  'bkernel','bpopcorn','bcob']);
+  'bkernel','bpopcorn','bcob',
+  // existing tower sprites (the three newest — freeze/butter/popcorn — show emoji for now)
+  'fire','microwave','laser','churn']);
 
 function card(m) {
   const art = HAVE.has(m.id)
     ? `<img src="/assets/sprites/${m.id}.png" alt="${m.name}" loading="lazy">`
     : `<div class="ph" title="art in progress">🌽</div>`;
-  const res = (m.res || []).map(r => `<span class="tag res" title="${RES[r]}">${r==='L'?'laser-proof':r==='F'?'freeze-proof*':'bomb-proof*'}</span>`).join('');
+  const res = (m.res || []).map(r => `<span class="tag res" title="${RES[r]}">${r==='L'?'laser-proof':r==='F'?'freeze-proof':'bomb-proof'}</span>`).join('');
   const leak = m.d > 0 ? `<span class="tag leak" title="lives lost if it leaks">💔 ${m.d.toLocaleString()}</span>`
                        : `<span class="tag butter">no leak</span>`;
   const pop = m.pop && m.pop !== '—' ? `<span class="tag pop">↳ ${m.pop}</span>` : '';
@@ -214,10 +213,64 @@ function card(m) {
 }
 
 const enemies = document.getElementById('enemies');
-enemies.innerHTML = '<h2>Enemies</h2><p class="grouphint">21 kernels, popped open. * = resistance that turns on next update.</p>' +
+enemies.innerHTML = '<h2>Enemies</h2><p class="grouphint">21 kernels, popped open. Every resistance is now live.</p>' +
   GROUPS.map(g => `<div style="margin:18px 0"><h3 style="color:var(--gold);font-size:15px;margin:0 0 3px">${g.title}</h3>
     <p class="grouphint" style="margin:0 0 10px">${g.hint}</p>
     <div class="grid">${g.mobs.map(card).join('')}</div></div>`).join('');
+
+// ── Towers (the son's Tower Update) ──────────────────────────────────────────
+// Each attacking/support tower has three upgrade paths; you may invest in two.
+const TOWERS = [
+  { id:'fire', name:'Fire Tosser', icon:'🔥', cost:200, tag:'attack',
+    blurb:'Cheap, fast flame dart at one kernel. The workhorse.',
+    paths:['Damage — Hot Shot → Blazing Shot','Fire Rate — Quick Load → Triple Shot','Range — High-Power → Mega Launcher'] },
+  { id:'microwave', name:'Microwave', icon:'📡', cost:750, tag:'attack',
+    blurb:'Pulses heat in a ring — hits every kernel around it.',
+    paths:['Damage — High-Power → Mega Wave','Fire Rate — Faster → Super-Fast Wave','Range — Long → Super Long Wave'] },
+  { id:'laser', name:'Laser', icon:'🔺', cost:500, tag:'attack',
+    blurb:'Piercing beam down a line — heavy, but Shiney Kernels bounce it.',
+    paths:['Damage — Focus Lens → Death Ray','Fire Rate — Faster → Fastest Fire','Range — Mega → Super Range'] },
+  { id:'freeze', name:'Freeze Ray', icon:'❄️', cost:750, tag:'support',
+    blurb:'Freezes up to 10 kernels solid — no damage, just time. Cobs shrug it off until Mega; the freeze-proof kernels and Big Corn of Doom never freeze.',
+    paths:['Freeze — Strong (4s) → Mega (8s, freezes cobs)','Fire Rate — Fast → Super-Fast','Range — Long → Very Long Ray'] },
+  { id:'butter', name:'Butter Turret', icon:'🧈', cost:750, tag:'support',
+    blurb:'Butters kernels so they crawl at half speed. The top tier butters cobs too; Poison Butter drips damage while it sticks.',
+    paths:['Butter Time — More Stick → Big Stick (cobs)','Fire Rate — Quick → Quicker Shot','Poison — Sharp Butter → Poison Butter (1 dmg/sec)'] },
+  { id:'churn', name:'Butter Churn', icon:'🪣', cost:1500, tag:'economy',
+    blurb:'No attack — it makes butter each round. Its third path pops out LIVES instead.',
+    paths:['Butter — more butter each round (up to 1000)','Butter Bank — interest on saved butter (up to 50%)','Popcorn — +1 / +2 / +3 lives every round'] },
+  { id:'popcorn', name:'Popcorn Machine', icon:'🍿', cost:2000, tag:'economy',
+    blurb:'Sucks kernels off the track and bakes them into LIVES (100 kernels → 1 life). Never leaks what it eats.',
+    paths:['Storage — bigger mouth (top tier swallows a cob)','Freshness — 75 kernels → 1, then → 2 lives','Range — Big Suck → Super Suck'] },
+];
+const BOMBS = [
+  { n:'Butter Bomb', c:50, d:25 }, { n:'Big Bomb', c:100, d:50 }, { n:'Bigger Bomb', c:250, d:125 },
+  { n:'Even Bigger Bomb', c:500, d:250 }, { n:'Biggest Bomb', c:1000, d:500 },
+];
+function towerCard(t){
+  const art = HAVE.has(t.id)
+    ? `<img src="/assets/sprites/${t.id}.png" alt="${t.name}" loading="lazy">`
+    : `<div class="ph" title="art in progress">${t.icon}</div>`;
+  return `<div class="card">
+    <div class="art">${art}</div>
+    <div class="name">${t.name}<span class="rar">· ${t.tag}</span></div>
+    <div class="tags"><span class="tag butter">🧈 ${t.cost}</span></div>
+    <p class="grouphint" style="margin:6px 0 8px">${t.blurb}</p>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      ${t.paths.map(p=>`<span class="tag pop" style="text-align:left">↳ ${p}</span>`).join('')}
+    </div>
+  </div>`;
+}
+const towers = document.getElementById('towers');
+towers.innerHTML = '<h2>Towers</h2>' +
+  '<p class="grouphint">Seven towers. Each has three upgrade paths — you may invest in <b>two</b>. ' +
+  'Art for the three newest is in progress.</p>' +
+  `<div class="grid">${TOWERS.map(towerCard).join('')}</div>` +
+  '<h3 style="color:var(--gold);font-size:15px;margin:22px 0 3px">Butter Bombs</h3>' +
+  '<p class="grouphint" style="margin:0 0 10px">One-use track mines — drop one on the track and it ' +
+  'blows the first kernel to step on it. Five sizes. (Black &amp; Zebra kernels are bomb-proof.)</p>' +
+  `<div class="grid">${BOMBS.map(b=>`<div class="card"><div class="name">💣 ${b.n}</div>
+    <div class="tags"><span class="tag butter">🧈 ${b.c}</span><span class="tag leak">💥 ${b.d} dmg</span></div></div>`).join('')}</div>`;
 
 // tiny nav highlight + version
 fetch('/version').then(r=>r.text()).then(v=>{ document.getElementById('ver').textContent = 'build ' + v.trim(); }).catch(()=>{});
