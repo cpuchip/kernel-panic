@@ -188,8 +188,8 @@ const GROUPS = [
 const HAVE = new Set(['poppable','kernel','hard','kettle','candy','black','white','blackwhite',
   'purple','melted','rainbow','superhard','shiney','cob','quickcob','bunch','ton','bigcorn',
   'bkernel','bpopcorn','bcob',
-  // existing tower sprites (the three newest — freeze/butter/popcorn — show emoji for now)
-  'fire','microwave','laser','churn']);
+  // tower sprites (all seven now drawn on the local harness)
+  'fire','microwave','laser','churn','freeze','butter','popcorn']);
 
 function card(m) {
   const art = HAVE.has(m.id)
@@ -263,8 +263,7 @@ function towerCard(t){
 }
 const towers = document.getElementById('towers');
 towers.innerHTML = '<h2>Towers</h2>' +
-  '<p class="grouphint">Seven towers. Each has three upgrade paths — you may invest in <b>two</b>. ' +
-  'Art for the three newest is in progress.</p>' +
+  '<p class="grouphint">Seven towers. Each has three upgrade paths — you may invest in <b>two</b>.</p>' +
   `<div class="grid">${TOWERS.map(towerCard).join('')}</div>` +
   '<h3 style="color:var(--gold);font-size:15px;margin:22px 0 3px">Butter Bombs</h3>' +
   '<p class="grouphint" style="margin:0 0 10px">One-use track mines — drop one on the track and it ' +

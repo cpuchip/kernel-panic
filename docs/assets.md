@@ -34,6 +34,9 @@ pattern reads as butter bubbles there).
 | `sprites/microwave.png` | 4006 | Microwave — unchanged P1b |
 | `sprites/laser.png` | 4007 | Laser (ray-gun appliance) — unchanged P1b |
 | `sprites/churn.png` | 4008 | Butter Churn — unchanged P1b |
+| `sprites/freeze.png` | 4009 | Freeze Ray — icy-blue frost cannon (Tower Update, 2026-07-08) |
+| `sprites/butter.png` | 4010 | Butter Turret — golden butter dispenser (Tower Update, 2026-07-08) |
+| `sprites/popcorn.png` | 4011 | Popcorn Machine — red-and-white popcorn cart (Tower Update, 2026-07-08) |
 
 Re-roll a mob: `make_kp_primitives.py` for the control image, then
 `scripts/gen-sprites.py <name>` (GPU-0 image ComfyUI on :8188), then `prep_kp_sprites.py`.
