@@ -2,14 +2,14 @@
 // Phase 0 is shapes (art comes in Phase 1 via the asset harness). Kernels =
 // kernels, cobs = bosses, towers by kind, plus transient FX from sim events.
 
-import { KERNELS, TOWERS, effRange } from '../shared/sim/content.ts'
+import { BOMB_RADIUS, KERNELS, TOWERS, effRange } from '../shared/sim/content.ts'
 import { MAPS, DEFAULT_MAP } from '../shared/sim/maps.ts'
-import type { Path } from '../shared/sim/path.ts'
+import { pointAt, type Path } from '../shared/sim/path.ts'
 import { kernelHeading, kernelWorld, tileBuildable, tileCenter } from '../shared/sim/sim.ts'
 import { TILE, WORLD_H, WORLD_W, type SimState, type Tower } from '../shared/sim/types.ts'
 
 export interface FxItem {
-  kind: 'pop' | 'beam' | 'pulse' | 'leak'
+  kind: 'pop' | 'beam' | 'pulse' | 'leak' | 'freeze' | 'butter' | 'bomb' | 'suck'
   x: number
   y: number
   tx?: number
@@ -23,6 +23,8 @@ export interface FxItem {
 export interface View {
   hoverTile: { cx: number; cy: number } | null
   placingType: string | null
+  placingBomb: number | null // bomb size being placed (for the tray)
+  bombGhostDist: number | null // snapped track distance for the bomb ghost
   selectedId: number | null
   canPlace: boolean
   fx: FxItem[]
@@ -36,7 +38,7 @@ if (typeof Image !== 'undefined') {
     'poppable', 'kernel', 'hard', 'kettle', 'candy', 'black', 'white', 'blackwhite',
     'purple', 'melted', 'rainbow', 'superhard', 'shiney',
     'cob', 'quickcob', 'bunch', 'ton', 'bigcorn', 'bkernel', 'bpopcorn', 'bcob',
-    'fire', 'microwave', 'laser', 'churn',
+    'fire', 'microwave', 'laser', 'churn', 'freeze', 'butter', 'popcorn',
   ]) {
     const img = new Image()
     img.src = `/assets/sprites/${n}.png`
@@ -58,14 +60,17 @@ function drawSpriteFit(ctx: CanvasRenderingContext2D, img: HTMLImageElement, siz
 }
 
 export function draw(ctx: CanvasRenderingContext2D, s: SimState, v: View): void {
+  const path = (MAPS[s.mapId] ?? MAPS[DEFAULT_MAP]).path
   background(ctx)
-  drawPath(ctx, (MAPS[s.mapId] ?? MAPS[DEFAULT_MAP]).path)
+  drawPath(ctx, path)
   if (v.placingType) buildableHints(ctx, s)
+  drawBombs(ctx, s, path)
   drawTowers(ctx, s, v)
   drawKernels(ctx, s)
   drawProjectiles(ctx, s)
   drawFx(ctx, v.fx)
   if (v.placingType && v.hoverTile) placeGhost(ctx, v)
+  if (v.placingBomb !== null && v.bombGhostDist !== null) bombGhost(ctx, path, v.bombGhostDist)
 }
 
 function background(ctx: CanvasRenderingContext2D): void {
@@ -168,6 +173,18 @@ function towerBody(ctx: CanvasRenderingContext2D, t: Tower): void {
       ctx.beginPath(); roundRect(ctx, -R + 2, -R, R * 2 - 4, R * 2, 6); ctx.fill(); ctx.stroke()
       ctx.strokeStyle = 'rgba(120,90,40,0.7)'; ctx.beginPath(); ctx.moveTo(-R + 2, -3); ctx.lineTo(R - 2, -3); ctx.moveTo(-R + 2, 4); ctx.lineTo(R - 2, 4); ctx.stroke()
       break
+    case 'freeze':
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      glyph(ctx, '❄️')
+      break
+    case 'butter':
+      ctx.beginPath(); roundRect(ctx, -R, -R, R * 2, R * 2, 4); ctx.fill(); ctx.stroke()
+      glyph(ctx, '🧈')
+      break
+    case 'popcorn':
+      ctx.beginPath(); roundRect(ctx, -R, -R, R * 2, R * 2, 4); ctx.fill(); ctx.stroke()
+      glyph(ctx, '🍿')
+      break
   }
   if (t.pathLevels.some((l) => l > 0)) {
     ctx.fillStyle = '#ffd166'
@@ -225,6 +242,17 @@ function drawKernels(ctx: CanvasRenderingContext2D, s: SimState): void {
       ctx.beginPath(); ctx.arc(-kt.radius * 0.3, -kt.radius * 0.3, kt.radius * 0.35, 0, Math.PI * 2); ctx.fill()
     }
     ctx.restore()
+    // status tint: frozen (icy ring + fill) or buttered (golden ring)
+    if (k.freeze && k.freeze > 0) {
+      ctx.fillStyle = 'rgba(140,227,255,0.32)'
+      ctx.strokeStyle = 'rgba(200,240,255,0.9)'
+      ctx.lineWidth = 2
+      ctx.beginPath(); ctx.arc(p.x, p.y, kt.radius + 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    } else if (k.slow && k.slow > 0) {
+      ctx.strokeStyle = 'rgba(255,217,138,0.9)'
+      ctx.lineWidth = 2.5
+      ctx.beginPath(); ctx.arc(p.x, p.y, kt.radius + 2, 0, Math.PI * 2); ctx.stroke()
+    }
     // hp arc for multi-hp kernels (drawn unrotated, around the sprite)
     if (kt.hp > 1 && k.hp < kt.hp) {
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'
@@ -273,6 +301,36 @@ function drawFx(ctx: CanvasRenderingContext2D, fx: FxItem[]): void {
       ctx.fillStyle = f.color
       ctx.beginPath(); ctx.arc(f.x, f.y, (f.r ?? 20) * (1 + (1 - a)), 0, Math.PI * 2); ctx.fill()
       ctx.globalAlpha = 1
+    } else if (f.kind === 'freeze') {
+      // an icy ring that snaps out
+      ctx.globalAlpha = a * 0.7
+      ctx.strokeStyle = f.color
+      ctx.lineWidth = 2.5
+      ctx.beginPath(); ctx.arc(f.x, f.y, (f.r ?? 40) * (1 - a) + 6, 0, Math.PI * 2); ctx.stroke()
+      ctx.globalAlpha = 1
+    } else if (f.kind === 'butter') {
+      // a soft golden splash
+      ctx.globalAlpha = a * 0.5
+      ctx.strokeStyle = f.color
+      ctx.lineWidth = 3
+      ctx.beginPath(); ctx.arc(f.x, f.y, (f.r ?? 40) * (1 - a) + 5, 0, Math.PI * 2); ctx.stroke()
+      ctx.globalAlpha = 1
+    } else if (f.kind === 'bomb') {
+      // an orange blast that expands and fades
+      ctx.globalAlpha = a
+      ctx.fillStyle = f.color
+      ctx.beginPath(); ctx.arc(f.x, f.y, (f.r ?? 45) * (1.3 - a * 0.3), 0, Math.PI * 2); ctx.fill()
+      ctx.globalAlpha = 1
+    } else if (f.kind === 'suck') {
+      // particles pulled inward toward the machine
+      ctx.globalAlpha = a * 0.8
+      ctx.fillStyle = f.color
+      const rr = (f.r ?? 30) * a
+      for (let i = 0; i < 5; i++) {
+        const ang = (i / 5) * Math.PI * 2
+        ctx.beginPath(); ctx.arc(f.x + Math.cos(ang) * rr, f.y + Math.sin(ang) * rr, 2.5, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 1
     }
   }
 }
@@ -293,7 +351,47 @@ function placeGhost(ctx: CanvasRenderingContext2D, v: View): void {
   ctx.fillRect(tile.cx * TILE + 3, tile.cy * TILE + 3, TILE - 6, TILE - 6)
 }
 
+// Butter Bombs sit on the track as little mines; they get bigger by size.
+function drawBombs(ctx: CanvasRenderingContext2D, s: SimState, path: Path): void {
+  for (const b of s.bombs) {
+    const p = pointAt(path, b.dist)
+    const r = 5 + b.size * 1.2
+    ctx.save()
+    ctx.translate(p.x, p.y)
+    ctx.fillStyle = '#2a211a'
+    ctx.strokeStyle = '#ffb454'
+    ctx.lineWidth = 2
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    // a little fuse spark
+    ctx.fillStyle = '#ffe08a'
+    ctx.beginPath(); ctx.arc(r * 0.5, -r * 0.5, 1.6, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+  }
+}
+
+// Ghost showing where a bomb will land (snapped to the nearest track point).
+function bombGhost(ctx: CanvasRenderingContext2D, path: Path, dist: number): void {
+  const p = pointAt(path, dist)
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,180,84,0.18)'
+  ctx.strokeStyle = 'rgba(255,180,84,0.7)'
+  ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.arc(p.x, p.y, BOMB_RADIUS, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  ctx.fillStyle = '#ffb454'
+  ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+}
+
 // ── tiny canvas helpers ──────────────────────────────────────────────────────
+
+/** Center an emoji/glyph at the current origin (for tower fallback shapes). */
+function glyph(ctx: CanvasRenderingContext2D, ch: string): void {
+  ctx.fillStyle = '#fff2d0'
+  ctx.font = '13px system-ui'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(ch, 0, 1)
+}
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.moveTo(x + r, y)

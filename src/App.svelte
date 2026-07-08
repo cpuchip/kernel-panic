@@ -4,7 +4,7 @@
     ui, start, stop, onPointerMove, onPointerLeave, onCanvasClick,
     selectType, selectedTower, upgradeSelected, sellSelected, setTargetSelected,
     startRound, setSpeed, togglePause, restart, towerOrder, deselect,
-    mapChoices, mapPreviewPoints, chooseMap, openMenu,
+    mapChoices, mapPreviewPoints, chooseMap, openMenu, bombChoices, selectBomb,
   } from './game.svelte.ts'
   import Settings from './Settings.svelte'
   import type { TargetPolicy } from '../shared/sim/types.ts'
@@ -17,6 +17,7 @@
   })
 
   const towers = towerOrder()
+  const bombs = bombChoices()
   const maps = mapChoices()
   const policies: { id: TargetPolicy; label: string }[] = [
     { id: 'first', label: 'First' },
@@ -66,7 +67,7 @@
           <b>{sel.def.name}</b>{#if sel.tiers > 0}<span class="badge">{'★'.repeat(Math.min(sel.tiers, 6))}</span>{/if}
           <button class="x" onclick={deselect} aria-label="close">×</button>
         </div>
-        {#if sel.def.kind !== 'econ'}
+        {#if sel.def.kind === 'dart' || sel.def.kind === 'beam' || sel.def.kind === 'pulse'}
           <div class="targets">
             {#each policies as p (p.id)}
               <button class:on={sel.tower.target === p.id} onclick={() => setTargetSelected(p.id)}>{p.label}</button>
@@ -107,6 +108,19 @@
         >
           <span class="tw-name">{t.name}</span>
           <span class="tw-cost">🧈{t.cost}</span>
+        </button>
+      {/each}
+      <span class="tray-div" aria-hidden="true"></span>
+      {#each bombs as b, i (b.name)}
+        <button
+          class="tw bomb"
+          class:active={ui.placingBomb === i}
+          class:poor={ui.butter < b.cost}
+          onclick={() => selectBomb(i)}
+          title={`${b.name} — one-use track mine, ${b.dmg} damage`}
+        >
+          <span class="tw-name">💣 {b.dmg}</span>
+          <span class="tw-cost">🧈{b.cost}</span>
         </button>
       {/each}
     </div>
@@ -280,6 +294,10 @@
   .tw-cost { font-size: 12px; color: #f2d16b; }
   .tw.active { border-color: var(--pop); box-shadow: 0 0 12px rgba(255,138,76,0.3); }
   .tw.poor { opacity: 0.5; }
+  .tw.bomb { min-width: 60px; }
+  .tw.bomb .tw-name { font-size: 13px; }
+  .tw.bomb.active { border-color: #ffb454; box-shadow: 0 0 12px rgba(255,180,84,0.35); }
+  .tray-div { flex: 0 0 auto; width: 1px; align-self: stretch; margin: 4px 2px; background: var(--line); }
 
   .start {
     width: 100%;

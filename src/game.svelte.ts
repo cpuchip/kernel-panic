@@ -4,10 +4,11 @@
 // chrome around it.
 
 import { mulberry32, type Rng } from '../shared/rng.ts'
-import { CAMPAIGN_ROUNDS, TOWERS, TOWER_ORDER, towerSpent } from '../shared/sim/content.ts'
+import { BOMBS, CAMPAIGN_ROUNDS, TOWERS, TOWER_ORDER, towerSpent } from '../shared/sim/content.ts'
 import { DEFAULT_MAP, MAPS, MAP_ORDER, type GameMap } from '../shared/sim/maps.ts'
+import { nearestDistAlong } from '../shared/sim/path.ts'
 import { apply, earlyBonus, newGame, tick, tileBuildable, RuleError } from '../shared/sim/sim.ts'
-import { DT, TPS, TILE, WORLD_H, WORLD_W, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
+import { DT, TPS, TILE, WORLD_H, WORLD_W, type BombType, type Command, type SimState, type TargetPolicy, type TowerType } from '../shared/sim/types.ts'
 import { draw, type FxItem } from './render.ts'
 import { playSfx } from './sound.svelte.ts'
 import { settings } from './settings.svelte.ts'
@@ -30,6 +31,7 @@ export const ui = $state({
   speed: 1,
   paused: false,
   placingType: null as string | null,
+  placingBomb: null as number | null, // bomb size index being placed on the track
   selectedId: null as number | null,
   error: '',
   version: 0, // bump to poke Svelte when selection details change
@@ -44,6 +46,7 @@ let acc = 0
 let last = 0
 const fx: FxItem[] = []
 let hoverTile: { cx: number; cy: number } | null = null
+let hoverWorld: { x: number; y: number } | null = null // raw board point (for the bomb ghost)
 let errorTimer: ReturnType<typeof setTimeout> | null = null
 
 export function towerOrder(): TowerType[] {
@@ -110,7 +113,7 @@ function loop(now: number): void {
   last = now
   // Menu up: hold the sim, just paint the empty board behind the picker.
   if (ui.screen !== 'playing') {
-    if (ctx) draw(ctx, sim, { hoverTile: null, placingType: null, selectedId: null, canPlace: false, fx })
+    if (ctx) draw(ctx, sim, { hoverTile: null, placingType: null, placingBomb: null, bombGhostDist: null, selectedId: null, canPlace: false, fx })
     return
   }
   const speed = ui.paused ? 0 : ui.speed
@@ -130,9 +133,13 @@ function loop(now: number): void {
   }
   advanceFx(realDt)
   if (ctx) {
+    const bombGhostDist =
+      ui.placingBomb !== null && hoverWorld ? nearestDistAlong(MAPS[sim.mapId].path, hoverWorld.x, hoverWorld.y) : null
     draw(ctx, sim, {
       hoverTile,
       placingType: ui.placingType,
+      placingBomb: ui.placingBomb,
+      bombGhostDist,
       selectedId: ui.selectedId,
       canPlace: hoverTile ? canPlaceHover() : false,
       fx,
@@ -156,6 +163,22 @@ function ingestEvents(): void {
       case 'pulse':
         fx.push({ kind: 'pulse', x: e.x!, y: e.y!, life: 0.28, max: 0.28, r: e.r!, color: '#5ad1e8' })
         playSfx('microwave')
+        break
+      case 'freeze':
+        fx.push({ kind: 'freeze', x: e.x!, y: e.y!, life: 0.3, max: 0.3, r: e.r!, color: '#8fe3ff' })
+        playSfx('freeze')
+        break
+      case 'butter':
+        fx.push({ kind: 'butter', x: e.x!, y: e.y!, life: 0.3, max: 0.3, r: e.r!, color: '#ffd98a' })
+        playSfx('butter')
+        break
+      case 'bomb':
+        fx.push({ kind: 'bomb', x: e.x!, y: e.y!, life: 0.4, max: 0.4, r: e.r ?? 45, color: '#ffb454' })
+        playSfx('bomb')
+        break
+      case 'suck':
+        fx.push({ kind: 'suck', x: e.x!, y: e.y!, life: 0.25, max: 0.25, r: e.r!, color: '#f6e7c4' })
+        playSfx('suck')
         break
       case 'fire':
         playSfx('fire')
@@ -196,21 +219,28 @@ function kernelColor(id?: string): string {
 
 // ── Input → commands ─────────────────────────────────────────────────────────
 
-function pxToTile(clientX: number, clientY: number): { cx: number; cy: number } | null {
+function pxToWorld(clientX: number, clientY: number): { x: number; y: number } | null {
   if (!canvas) return null
   const rect = canvas.getBoundingClientRect()
-  const wx = ((clientX - rect.left) / rect.width) * WORLD_W
-  const wy = ((clientY - rect.top) / rect.height) * WORLD_H
-  if (wx < 0 || wy < 0 || wx > WORLD_W || wy > WORLD_H) return null
-  return { cx: Math.floor(wx / TILE), cy: Math.floor(wy / TILE) }
+  const x = ((clientX - rect.left) / rect.width) * WORLD_W
+  const y = ((clientY - rect.top) / rect.height) * WORLD_H
+  if (x < 0 || y < 0 || x > WORLD_W || y > WORLD_H) return null
+  return { x, y }
+}
+
+function pxToTile(clientX: number, clientY: number): { cx: number; cy: number } | null {
+  const w = pxToWorld(clientX, clientY)
+  return w ? { cx: Math.floor(w.x / TILE), cy: Math.floor(w.y / TILE) } : null
 }
 
 export function onPointerMove(clientX: number, clientY: number): void {
   hoverTile = pxToTile(clientX, clientY)
+  hoverWorld = pxToWorld(clientX, clientY)
 }
 
 export function onPointerLeave(): void {
   hoverTile = null
+  hoverWorld = null
 }
 
 function canPlaceHover(): boolean {
@@ -220,6 +250,17 @@ function canPlaceHover(): boolean {
 }
 
 export function onCanvasClick(clientX: number, clientY: number): void {
+  // placing a bomb: snap the tap to the nearest point on the track.
+  if (ui.placingBomb !== null) {
+    const w = pxToWorld(clientX, clientY)
+    if (!w) return
+    const d = nearestDistAlong(MAPS[sim.mapId].path, w.x, w.y)
+    if (dispatch({ t: 'placeBomb', size: ui.placingBomb, dist: d })) {
+      playSfx('place')
+      if (sim.butter < BOMBS[ui.placingBomb].cost) ui.placingBomb = null // out of butter → exit
+    }
+    return
+  }
   const tile = pxToTile(clientX, clientY)
   if (!tile) return
   // clicked an existing tower? select it.
@@ -242,11 +283,25 @@ export function onCanvasClick(clientX: number, clientY: number): void {
 
 export function selectType(id: string): void {
   ui.placingType = ui.placingType === id ? null : id
+  ui.placingBomb = null
+  ui.selectedId = null
+}
+
+/** The five Butter Bomb sizes for the bomb tray. */
+export function bombChoices(): BombType[] {
+  return BOMBS
+}
+
+/** Enter (or leave) bomb-placing mode for a given size. */
+export function selectBomb(size: number): void {
+  ui.placingBomb = ui.placingBomb === size ? null : size
+  ui.placingType = null
   ui.selectedId = null
 }
 
 export function cancelPlacing(): void {
   ui.placingType = null
+  ui.placingBomb = null
 }
 
 export function deselect(): void {
@@ -336,6 +391,7 @@ function startGame(mapId: string): void {
   fx.length = 0
   ui.mapId = sim.mapId
   ui.placingType = null
+  ui.placingBomb = null
   ui.selectedId = null
   ui.paused = false
   ui.speed = 1
